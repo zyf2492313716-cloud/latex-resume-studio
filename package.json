@@ -2,6 +2,8 @@
   "name": "latex-resume-studio",
   "private": true,
   "version": "3.0.0",
+  "description": "LaTeX 简历工坊：支持 Word/DOCX 与 LaTeX 模板的 macOS 简历生成器",
+  "author": "zhouyufeng",
   "type": "module",
   "main": "electron-main.cjs",
   "scripts": {
@@ -89,6 +91,6 @@
         "to": "latex_templates"
       }
     ],
-    "asar": false
+    "asar": true
   }
 }
