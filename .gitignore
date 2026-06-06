@@ -35,7 +35,9 @@ ENV/
 env/
 src/utils/libs/
 
-build/
+build/*
+!build/
+!build/icon.icns
 dist/
 dist-desktop/
 智能简历生成器.spec
@@ -43,3 +45,4 @@ temp_resume_data.json
 /tmp/temp_resume_data.json
 .DS_Store
 *.marked.docx
+LOOP_FIX_PROMPT.md

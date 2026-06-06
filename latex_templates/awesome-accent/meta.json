@@ -1,0 +1,13 @@
+{
+  "id": "awesome-accent",
+  "name": "awesome-accent",
+  "displayName": "Awesome Accent 视觉 LaTeX",
+  "group": "LaTeX 模板",
+  "engineType": "latex",
+  "kind": "latex",
+  "tags": ["视觉优先", "强调色", "作品集", "中文友好", "需编译器"],
+  "recommendedCompiler": "xelatex",
+  "license": "Original implementation; style inspired by Awesome-CV (LPPL)",
+  "source": "https://github.com/posquit0/Awesome-CV",
+  "inspiredBy": "Awesome-CV accent/header style"
+}

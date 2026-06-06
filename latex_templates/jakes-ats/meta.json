@@ -1,0 +1,13 @@
+{
+  "id": "jakes-ats",
+  "name": "jakes-ats",
+  "displayName": "Jake ATS 极简 LaTeX",
+  "group": "LaTeX 模板",
+  "engineType": "latex",
+  "kind": "latex",
+  "tags": ["ATS友好", "极简", "技术岗", "中文友好", "需编译器"],
+  "recommendedCompiler": "xelatex",
+  "license": "Original implementation; style inspired by MIT-licensed Jake's Resume",
+  "source": "https://github.com/jakegut/resume",
+  "inspiredBy": "Jake's Resume / Overleaf ATS template"
+}

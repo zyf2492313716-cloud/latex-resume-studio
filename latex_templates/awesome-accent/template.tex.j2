@@ -1,0 +1,85 @@
+\documentclass[10pt,a4paper]{ctexart}
+{% include "_partials/common_macros.tex.j2" %}
+\geometry{left=1.45cm,right=1.45cm,top=1.25cm,bottom=1.25cm}
+\definecolor{accent}{HTML}{DC2626}
+\definecolor{dark}{HTML}{111827}
+\definecolor{muted}{HTML}{6B7280}
+\renewcommand{\rgSection}[1]{\vspace{0.55em}{\large\bfseries\color{dark}#1}\hspace{0.45em}{\color{accent}\rule[0.55ex]{0.22\linewidth}{1.3pt}}\par\vspace{0.3em}}
+\setlist[itemize]{label={\color{accent}\small\textbullet}}
+
+\begin{document}
+{\color{accent}\rule{\linewidth}{2.4pt}}\par\vspace{0.35em}
+{\Huge\bfseries\color{dark}{{ basic.name }}}\par
+{% if basic.title %}{\Large\color{accent}{{ basic.title }}}\par{% endif %}
+\vspace{0.15em}
+{\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\quad / \quad{% endif %}{{ contact.value }}{% endfor %}}\par
+\vspace{0.55em}
+
+{% if basic.summary %}
+{\small\justifying {{ basic.summary }}}\par
+{% endif %}
+
+{% if experience %}
+\rgSection{Experience}
+{% for e in experience %}
+\rgEntry{ {{ e.company }} }{ {{ e.date }} }{ \textcolor{accent}{ {{ e.role }} } }{}
+{% if e.bullets %}\begin{rgBullets}
+{% for bullet in e.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if projects %}
+\rgSection{Projects}
+{% for p in projects %}
+\rgEntry{ {{ p.name }} }{ {{ p.date }} }{ \textcolor{accent}{ {{ p.role }} } }{}
+{% if p.bullets %}\begin{rgBullets}
+{% for bullet in p.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if education %}
+\rgSection{Education}
+{% for e in education %}
+\rgEntry{ {{ e.school }} }{ {{ e.date }} }{ {{ e.degree }}{% if e.degree and e.major %}\quad · \quad{% endif %}{{ e.major }} }{}
+{% if e.bullets %}\begin{rgBullets}
+{% for bullet in e.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if research %}
+\rgSection{Research}
+{% for r in research %}
+\rgEntry{ {{ r.name }} }{ {{ r.date }} }{ {{ r.role }} }{}
+{% if r.bullets %}\begin{rgBullets}
+{% for bullet in r.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if studentWork %}
+\rgSection{Leadership}
+{% for s in studentWork %}
+\rgEntry{ {{ s.organization }} }{ {{ s.date }} }{ {{ s.role }} }{}
+{% if s.bullets %}\begin{rgBullets}
+{% for bullet in s.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if skills %}
+\rgSection{Skills}
+{% for skill in skills %}\rgSkillLine{ {{ skill }} }
+{% endfor %}
+{% endif %}
+
+{% if honors %}
+\rgSection{Awards}
+\begin{rgBullets}
+{% for item in honors %}\item {{ item }}
+{% endfor %}\end{rgBullets}
+{% endif %}
+
+\end{document}

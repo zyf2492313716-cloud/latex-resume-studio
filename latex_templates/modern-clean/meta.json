@@ -1,0 +1,13 @@
+{
+  "id": "modern-clean",
+  "name": "modern-clean",
+  "displayName": "Modern Clean 稳重 LaTeX",
+  "group": "LaTeX 模板",
+  "engineType": "latex",
+  "kind": "latex",
+  "tags": ["稳重", "单页", "中文友好", "通用", "需编译器"],
+  "recommendedCompiler": "xelatex",
+  "license": "Original lightweight implementation; style inspired by moderncv (LPPL)",
+  "source": "https://ctan.org/pkg/moderncv",
+  "inspiredBy": "moderncv clean/classic visual language"
+}

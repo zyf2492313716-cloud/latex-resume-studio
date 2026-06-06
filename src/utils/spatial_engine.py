@@ -14,6 +14,107 @@ import lxml.etree as ET
 NS_W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 NS_WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
 NS_V = 'urn:schemas-microsoft-com:vml'
+XML_NS = 'http://www.w3.org/XML/1998/namespace'
+
+
+def _get_bundled_templates_dir():
+    """Return bundled templates dir in dev (project/templates) or packaged resources."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.abspath(os.path.join(here, '..', 'templates')),
+        os.path.abspath(os.path.join(here, '..', '..', 'templates')),
+    ]
+    for d in candidates:
+        if os.path.isdir(d):
+            return d
+    return candidates[0]
+
+
+def _cleanup_docx_preview_artifacts(output_path: str):
+    """Remove source-less VML image placeholders that QuickLook renders as gray blocks."""
+    try:
+        from photo_replace import cleanup_empty_vml_imagedata
+        result = cleanup_empty_vml_imagedata(output_path)
+        if result.get('removed'):
+            print(f"docx_cleanup:preview_artifacts:{result.get('removed')}", file=sys.stderr)
+        elif result.get('warning'):
+            print(f"docx_cleanup:WARN:{result.get('warning')}", file=sys.stderr)
+        return result
+    except Exception as exc:
+        print(f"docx_cleanup:WARN:{exc}", file=sys.stderr)
+        return None
+
+
+def _apply_photo_replacement_if_needed(output_path: str, data: dict):
+    """Apply uploaded portrait replacement for spatial engine outputs."""
+    try:
+        photo_value = (data or {}).get('basicInfo', {}).get('photo', '')
+        if not photo_value:
+            return None
+        from photo_replace import replace_photo_in_docx
+        result = replace_photo_in_docx(output_path, photo_value)
+        if result.get('replaced'):
+            print(f"photo_replace:OK:{','.join(result.get('replaced_media', []))}", file=sys.stderr)
+        else:
+            print(f"photo_replace:WARN:{'|'.join(result.get('warnings', [])) or 'unknown'}", file=sys.stderr)
+        return result
+    except Exception as exc:
+        print(f"photo_replace:WARN:{exc}", file=sys.stderr)
+        return None
+
+
+def _set_xml_space_if_needed(t_node, text):
+    if text and (text[:1].isspace() or text[-1:].isspace()):
+        t_node.set(f'{{{XML_NS}}}space', 'preserve')
+    elif f'{{{XML_NS}}}space' in t_node.attrib:
+        del t_node.attrib[f'{{{XML_NS}}}space']
+
+
+def _find_parent_run(node):
+    parent = node.getparent()
+    while parent is not None:
+        if parent.tag == f'{{{NS_W}}}r':
+            return parent
+        parent = parent.getparent()
+    return None
+
+
+def _ensure_run_font_size(run, half_points='16'):
+    if run is None:
+        return
+    rPr = run.find(f'{{{NS_W}}}rPr')
+    if rPr is None:
+        rPr = ET.Element(f'{{{NS_W}}}rPr')
+        run.insert(0, rPr)
+    for tag in ('sz', 'szCs'):
+        node = rPr.find(f'{{{NS_W}}}{tag}')
+        if node is None:
+            node = ET.Element(f'{{{NS_W}}}{tag}')
+            rPr.append(node)
+        node.set(f'{{{NS_W}}}val', half_points)
+
+
+def _write_text_node_with_breaks(t_node, value):
+    value = '' if value is None else str(value)
+    parts = value.split('\n')
+    t_node.text = parts[0]
+    _set_xml_space_if_needed(t_node, parts[0])
+
+    parent = t_node.getparent()
+    if len(parts) > 1 and parent is not None:
+        insert_at = parent.index(t_node) + 1
+        for part in parts[1:]:
+            br = ET.Element(f'{{{NS_W}}}br')
+            new_t = ET.Element(f'{{{NS_W}}}t')
+            new_t.text = part
+            _set_xml_space_if_needed(new_t, part)
+            parent.insert(insert_at, br)
+            insert_at += 1
+            parent.insert(insert_at, new_t)
+            insert_at += 1
+
+    if '@' in value and len(value) > 18:
+        _ensure_run_font_size(_find_parent_run(t_node), '16')
 
 # 全局板块关键字
 SECTION_PATTERNS = {
@@ -94,7 +195,7 @@ class SpatialFiller:
         self.known_names = list(ALL_KNOWN_NAMES)
         yaml_path = template_path.replace('.docx', '.yaml').replace('.docxtpl.docx', '.yaml')
         if not os.path.exists(yaml_path):
-            bundled_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'templates'))
+            bundled_dir = _get_bundled_templates_dir()
             alt_yaml = os.path.join(bundled_dir, os.path.basename(yaml_path))
             if os.path.exists(alt_yaml):
                 yaml_path = alt_yaml
@@ -303,6 +404,12 @@ class SpatialFiller:
             self.warnings.append("No absolute layout textboxes found.")
             return False
 
+        if self._fill_template_specific(txbxs):
+            self._write_output_docx(output_path)
+            _cleanup_docx_preview_artifacts(output_path)
+            _apply_photo_replacement_if_needed(output_path, self.data)
+            return True
+
         columns = self._cluster_columns(txbxs)
         basic = self.data.get('basicInfo', {})
         
@@ -458,7 +565,47 @@ class SpatialFiller:
                 self._replace_textbox_text(node, new_txt)
                 filled_nodes.add(node)
 
-        # Save filled document XML
+        # Ensure templates without explicit phone/email placeholders still expose contact info.
+        current_text = ''.join(t.text or '' for t in self.root.iter(f'{{{NS_W}}}t'))
+        missing_contact_parts = []
+        if basic.get('phone') and basic['phone'] not in current_text:
+            missing_contact_parts.append(basic['phone'])
+        if basic.get('email') and basic['email'] not in current_text:
+            missing_contact_parts.append(basic['email'])
+        if missing_contact_parts:
+            contact_text = ' | '.join(missing_contact_parts)
+            contact_box = None
+            for box in reversed(txbxs):
+                txt = box['text']
+                if any(k in txt for k in ['电话', '手机', '邮箱', 'Email', '联系方式', '联系', '岁|', '期望地点', '地址']):
+                    contact_box = box
+                    break
+            if contact_box is None:
+                for box in txbxs:
+                    if box['node'] not in filled_nodes and self._is_basic_info_box(box['text']):
+                        contact_box = box
+                        break
+            if contact_box is not None:
+                self._replace_textbox_text(contact_box['node'], contact_text)
+                filled_nodes.add(contact_box['node'])
+
+        # Final guard: if a grouped basic-info textbox swallowed the email run, append it to the phone line.
+        final_text = ''.join(t.text or '' for t in self.root.iter(f'{{{NS_W}}}t'))
+        if basic.get('email') and basic['email'] not in final_text:
+            for t in self.root.iter(f'{{{NS_W}}}t'):
+                if t.text and ((basic.get('phone') and basic['phone'] in t.text) or '手机' in t.text or '电话' in t.text):
+                    t.text = t.text.rstrip() + ' | ' + basic['email']
+                    _ensure_run_font_size(_find_parent_run(t), '16')
+                    break
+
+        self._write_output_docx(output_path)
+
+        _cleanup_docx_preview_artifacts(output_path)
+        _apply_photo_replacement_if_needed(output_path, self.data)
+        return len(filled_nodes) > 0
+
+    def _write_output_docx(self, output_path: str):
+        """Save current document.xml back into a DOCX, preserving all other parts."""
         modified_xml = ET.tostring(self.root, encoding='unicode')
         buffer = io.BytesIO()
         with zipfile.ZipFile(self.template_path, 'r') as zin:
@@ -471,16 +618,156 @@ class SpatialFiller:
 
         with open(output_path, 'wb') as f:
             f.write(buffer.getvalue())
-            
-        return len(filled_nodes) > 0
+
+    def _format_basic_title_line(self):
+        basic = self.data.get('basicInfo', {})
+        name = basic.get('name', '').strip()
+        title = basic.get('title', '').strip()
+        if name and title:
+            return f"{name} 求职意向：{title}"
+        return name or title
+
+    def _format_contact_block(self):
+        basic = self.data.get('basicInfo', {})
+        parts = []
+        for key in ('phone', 'email', 'wechat', 'github'):
+            val = (basic.get(key) or '').strip()
+            if val:
+                parts.append(val)
+        return '\n'.join(parts)
+
+    def _format_basic_details_block(self):
+        basic = self.data.get('basicInfo', {})
+        edu = (self.data.get('education') or [{}])[0] if self.data.get('education') else {}
+        lines = []
+        for label, value in [
+            ('学历', basic.get('degree') or edu.get('degree')),
+            ('专业', basic.get('major') or edu.get('major')),
+            ('学校', edu.get('school')),
+            ('籍贯', basic.get('address')),
+        ]:
+            if value:
+                lines.append(f"{label}：{value}")
+        return '\n'.join(lines)
+
+    def _format_description_lines(self, text):
+        if not text:
+            return ''
+        parts = [p.strip() for p in re.split(r'[\n；;]+', str(text)) if p.strip()]
+        return '\n'.join(('• ' + p if not p.startswith(('•', '-', '✓', '✔')) else p) for p in parts)
+
+    def _format_entries_block(self, sec_type, max_items=2):
+        items = self.data.get(sec_type, []) or []
+        blocks = []
+        for item in items[:max_items]:
+            if sec_type == 'education':
+                head = '    '.join(p for p in [item.get('date', ''), item.get('school', ''), ' '.join(p for p in [item.get('major', ''), f"({item.get('degree')})" if item.get('degree') else ''] if p)] if p)
+                desc = self._format_description_lines(item.get('description', ''))
+            elif sec_type == 'experience':
+                head = '    '.join(p for p in [item.get('date', ''), item.get('company', ''), item.get('role', '')] if p)
+                desc = self._format_description_lines(item.get('description', ''))
+            elif sec_type == 'projects':
+                head = '    '.join(p for p in [item.get('date', ''), item.get('name', ''), item.get('role', '')] if p)
+                desc = self._format_description_lines(item.get('description', ''))
+            else:
+                head = '    '.join(p for p in [item.get('date', ''), item.get('organization', ''), item.get('role', '')] if p)
+                desc = self._format_description_lines(item.get('description', ''))
+            block = head
+            if desc:
+                block = (block + '\n' if block else '') + desc
+            if block:
+                blocks.append(block)
+        return '\n\n'.join(blocks)
+
+    def _format_honors_or_skills_block(self):
+        honors = self.data.get('honors') or []
+        skills = self.data.get('skills') or []
+        if honors:
+            return '\n'.join(('• ' + h if not h.startswith(('•', '-', '*')) else h) for h in honors)
+        if skills:
+            return '\n'.join(('• ' + s if not s.startswith(('•', '-', '*')) else s) for s in skills)
+        return ''
+
+    def _fill_template_specific(self, txbxs) -> bool:
+        """High-confidence repairs for templates whose visible text boxes need whole-block replacement.
+
+        These templates use duplicated VML/DrawingML text boxes.  Keyword-level
+        replacement can leave dates, age/address defaults, or long placeholder
+        paragraphs visible.  Replacing the whole semantic text box gives a much
+        closer Word result and makes visual validation meaningful.
+        """
+        if self.base_name not in {'文艺单页03', '文艺单页04'}:
+            return False
+
+        basic = self.data.get('basicInfo', {})
+        summary = (basic.get('summary') or self.data.get('summary') or '').strip()
+        changed = False
+
+        for box in txbxs:
+            txt = box['text']
+            node = box['node']
+            replacement = None
+
+            if self.base_name == '文艺单页03':
+                if '钟小艾' in txt:
+                    replacement = basic.get('name', '')
+                elif txt.startswith('求职意向'):
+                    title = basic.get('title', '').strip()
+                    replacement = f"求职意向：{title}" if title else ''
+                elif '出生日期' in txt or 'Xiaowangzi' in txt or '180-5505-0900' in txt:
+                    replacement = self._format_contact_block()
+                elif txt in {'教育背景', '实习经历', '获奖证书', '自我评价'}:
+                    replacement = None
+                elif '华南师范' in txt or '2012.09-2016.05' in txt:
+                    replacement = self._format_entries_block('education', 1)
+                elif '英语培训机构' in txt or '2014.07-2015.09' in txt:
+                    replacement = self._format_entries_block('experience', 1)
+                elif '通过CET6' in txt or '国家奖学金' in txt:
+                    replacement = self._format_honors_or_skills_block()
+                elif '尊敬他人' in txt or '团队精神' in txt:
+                    replacement = summary
+
+            elif self.base_name == '文艺单页04':
+                if '乔 彬' in txt or '求职意向：财务会计' in txt:
+                    replacement = self._format_basic_title_line()
+                elif txt in {'联系方式', '基本资料', '关于我', '教育背景', '工作经验'}:
+                    replacement = None
+                elif '21岁' in txt or '138-8888-8888' in txt or '13888123@qq.com' in txt:
+                    replacement = self._format_contact_block()
+                elif '性别：' in txt and '籍贯' in txt:
+                    replacement = self._format_basic_details_block()
+                elif '个人方面' in txt or '工作态度' in txt:
+                    replacement = summary
+                elif '湖北十堰大学' in txt or '毕业院校' in txt or '专业课程' in txt:
+                    replacement = self._format_entries_block('education', 1)
+                elif '深圳科技网络公司' in txt or '产品运营总监' in txt or txt.startswith('时间：2013.8'):
+                    replacement = self._format_entries_block('experience', 2)
+
+            if replacement is not None:
+                self._replace_textbox_text(node, replacement)
+                changed = True
+
+        return changed
 
     def _replace_textbox_text(self, txbx_node, value):
-        """Replace all text run elements inside a textbox with value."""
-        t_nodes = list(txbx_node.iter(f'{{{NS_W}}}t'))
+        """Replace all text in a textbox with value, preserving line breaks without empty bullet paragraphs."""
+        t_nodes = list(tbx_node_iter for tbx_node_iter in txbx_node.iter(f'{{{NS_W}}}t'))
         if not t_nodes:
             return
-        # Set first text node, clear the rest
-        t_nodes[0].text = value
+
+        first_t = t_nodes[0]
+        first_para = first_t.getparent()
+        while first_para is not None and first_para.tag != f'{{{NS_W}}}p':
+            first_para = first_para.getparent()
+
+        if first_para is not None:
+            for p in list(txbx_node.findall(f'{{{NS_W}}}p')):
+                if p is not first_para:
+                    txbx_node.remove(p)
+            t_nodes = list(first_para.iter(f'{{{NS_W}}}t'))
+            first_t = t_nodes[0] if t_nodes else first_t
+
+        _write_text_node_with_breaks(first_t, value)
         for t in t_nodes[1:]:
             t.text = ""
 

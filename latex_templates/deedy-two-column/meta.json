@@ -1,0 +1,13 @@
+{
+  "id": "deedy-two-column",
+  "name": "deedy-two-column",
+  "displayName": "Deedy Two Column 双栏 LaTeX",
+  "group": "LaTeX 模板",
+  "engineType": "latex",
+  "kind": "latex",
+  "tags": ["视觉优先", "双栏", "信息密度高", "中文友好", "ATS风险", "需编译器"],
+  "recommendedCompiler": "xelatex",
+  "license": "Original implementation; style inspired by Apache-2.0 Deedy Resume and AltaCV layout ideas",
+  "source": "https://github.com/deedy/Deedy-Resume",
+  "inspiredBy": "Deedy Resume / AltaCV two-column visual structure"
+}

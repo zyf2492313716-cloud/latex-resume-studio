@@ -277,10 +277,11 @@ def generate_config(name, path, analysis):
         }
 
     # --- Title ---
-    # Always use label_inline with '求职意向' as fallback
+    # Use placeholder keyword scan; template_engine also has runtime label fallback.
     config['basic_info']['fields']['title'] = {
-        'type': 'label_inline',
-        'pattern': '求职意向',
+        'type': 'keyword_scan',
+        'keywords': ['求职意向', '目标职位', '应聘职位', '应聘岗位', '意向岗位', '平面设计', '网页设计师', '美术主编', 'UI设计师', '销售员岗位'],
+        'value_scope': 'keyword_substring',
     }
 
     # --- Phone ---
@@ -515,8 +516,9 @@ def generate_config(name, path, analysis):
 
 
 def main():
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
     template_dir = sys.argv[1] if len(sys.argv) > 1 else "/Users/zhouyufeng/Downloads/1 单页简历/"
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else "/Users/zhouyufeng/opencode/web/resume-generator/templates/"
+    output_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(repo_root, "templates")
 
     existing = [
         '简约单页01', '稳重单页01', '文艺单页01', '文艺单页20',

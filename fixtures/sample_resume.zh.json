@@ -1,0 +1,76 @@
+{
+  "basicInfo": {
+    "name": "周雨峰",
+    "title": "AI 产品工程师 / 全栈开发",
+    "phone": "138-0000-0000",
+    "email": "zhou@example.com",
+    "wechat": "zyf_notes",
+    "github": "github.com/zhouyufeng",
+    "summary": "关注 AI 工具、知识管理与工程效率，具备 Electron、React、Python 与自动化工作流经验，能够从产品需求到工程落地完整推进。",
+    "photo": ""
+  },
+  "education": [
+    {
+      "school": "某某大学",
+      "major": "计算机科学与技术",
+      "degree": "本科",
+      "date": "2020.09 - 2024.06",
+      "description": "GPA 3.8/4.0；主修数据结构、操作系统、编译原理、机器学习。"
+    }
+  ],
+  "experience": [
+    {
+      "company": "智能工具工作室",
+      "role": "全栈开发实习生",
+      "date": "2024.07 - 2025.03",
+      "description": "负责 Electron + React 桌面端简历生成器核心模块开发；\n设计 Python 渲染管线，将结构化简历数据映射到 DOCX/LaTeX 模板；\n引入自动化预览与回归验证脚本，减少模板修改后的人工检查成本。"
+    },
+    {
+      "company": "开源协作项目",
+      "role": "贡献者",
+      "date": "2023.10 - 2024.06",
+      "description": "维护知识库自动整理脚本与 Markdown 链接检查工具；\n优化 CLI 交互与错误提示，使非技术用户也能快速定位配置问题。"
+    }
+  ],
+  "projects": [
+    {
+      "name": "LaTeX 简历生成器 v2",
+      "role": "项目负责人",
+      "date": "2026.06",
+      "description": "基于现有简历生成器新增 LaTeX 模板体系；\n实现 Jinja2 渲染、TeX 转义、编译器检测、.tex 导出与可选 PDF 编译；\n将 ATS 友好模板与视觉优先模板拆分标注，降低用户选择成本。"
+    },
+    {
+      "name": "Obsidian 知识工作流",
+      "role": "开发者",
+      "date": "2025.01 - 2025.12",
+      "description": "围绕 Obsidian vault 构建笔记清洗、标签整理、双链修复与任务跟踪自动化；\n使用脚本化验证确保 Markdown、YAML frontmatter 与 Wiki-links 不被破坏。"
+    }
+  ],
+  "research": [
+    {
+      "name": "AI Agent 在个人知识管理中的可靠性研究",
+      "role": "独立研究",
+      "date": "2025.09",
+      "description": "比较单 Agent 与多 Agent 在信息抽取、计划生成和错误纠正任务中的表现；\n总结可复用的验证模式，包括 adversarial verify、loop-until-dry 与 completeness critic。"
+    }
+  ],
+  "studentWork": [
+    {
+      "organization": "学生技术协会",
+      "role": "技术负责人",
+      "date": "2022.09 - 2023.06",
+      "description": "组织 6 场工程实践分享，覆盖 Web 开发、Linux 基础与自动化脚本。"
+    }
+  ],
+  "honors": [
+    "校级优秀毕业生",
+    "全国大学生软件创新大赛二等奖",
+    "开源项目月度贡献者"
+  ],
+  "skills": [
+    "前端：React、Vite、Electron、TypeScript/JavaScript、CSS-in-JS",
+    "后端与脚本：Python、Node.js、Jinja2、REST API、自动化测试",
+    "工具链：Git、Obsidian、LaTeX、QuickLook、LibreOffice、CI/CD",
+    "AI：Prompt Engineering、Agent 工作流设计、结构化信息抽取"
+  ]
+}

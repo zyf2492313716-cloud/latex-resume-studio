@@ -16,7 +16,8 @@ export const DEFAULT_RESUME_DATA = {
     email: "",
     wechat: "",
     github: "",
-    summary: ""
+    summary: "",
+    photo: ""
   },
   ...EMPTY_SECTIONS
 };
@@ -36,7 +37,8 @@ async function parseWithLLM(text, config) {
     "email": "电子邮箱",
     "wechat": "微信",
     "github": "Github链接或个人主页",
-    "summary": "个人总结或自我评价，段落在一页纸内应言简意赅"
+    "summary": "个人总结或自我评价，段落在一页纸内应言简意赅",
+    "photo": "头像/照片 data URL；AI 解析时请留空字符串"
   },
   "education": [
     {
@@ -153,7 +155,7 @@ async function parseWithLLM(text, config) {
 
 function sanitizeParsedData(data) {
   const result = {
-    basicInfo: { name: "", title: "", phone: "", email: "", wechat: "", github: "", summary: "" },
+    basicInfo: { name: "", title: "", phone: "", email: "", wechat: "", github: "", summary: "", photo: "" },
     education: [],
     experience: [],
     projects: [],
@@ -203,7 +205,7 @@ export function parseWithLocalRules(text) {
     .filter(e => e.clean !== "");
 
   const result = {
-    basicInfo: { name: "", title: "", phone: "", email: "", wechat: "", github: "", summary: "" },
+    basicInfo: { name: "", title: "", phone: "", email: "", wechat: "", github: "", summary: "", photo: "" },
     education: [],
     experience: [],
     projects: [],

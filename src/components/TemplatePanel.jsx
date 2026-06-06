@@ -38,6 +38,25 @@ export default function TemplatePanel({
   const getStatusIcon = (name) => {
     const s = configStatus[name];
     if (!s) return null;
+    if (s.engineType === 'latex') {
+      return (
+        <span
+          title="TeX 模板：支持导出 .tex；检测到 LaTeX 编译器后可编译 PDF"
+          style={{
+            color: '#c4b5fd',
+            background: 'rgba(139,92,246,0.14)',
+            border: '1px solid rgba(139,92,246,0.32)',
+            borderRadius: '3px',
+            padding: '1px 4px',
+            fontSize: '9px',
+            fontWeight: 800,
+            marginLeft: 'auto'
+          }}
+        >
+          TeX
+        </span>
+      );
+    }
     if (s.engineType === 'spatial') {
       return (
         <span 
@@ -83,8 +102,12 @@ export default function TemplatePanel({
   const grouped = {};
   templateList.forEach(t => {
     let group = '其他';
-    for (const g of STYLE_GROUPS) {
-      if (t.name.startsWith(g.key)) { group = g.label; break; }
+    if (t.kind === 'latex' || t.engineType === 'latex') {
+      group = t.group || 'LaTeX 模板';
+    } else {
+      for (const g of STYLE_GROUPS) {
+        if (t.name.startsWith(g.key)) { group = g.label; break; }
+      }
     }
     if (!grouped[group]) grouped[group] = [];
     grouped[group].push(t);
@@ -151,6 +174,8 @@ export default function TemplatePanel({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 {templates.map(t => {
                   const isSelected = selectedTemplate?.name === t.name;
+                  const isLatex = t.kind === 'latex' || t.engineType === 'latex';
+                  const tags = (t.tags || []).slice(0, 4);
                   return (
                     <div key={t.name}
                       onClick={() => { setSelectedTemplate(t); }}
@@ -163,10 +188,25 @@ export default function TemplatePanel({
                         transition: 'all 0.15s'
                       }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
-                        <FileText size={12} style={{ flexShrink: 0 }} />
+                        <FileText size={12} style={{ flexShrink: 0, color: isLatex ? '#c4b5fd' : undefined }} />
                         <span>{t.displayName}</span>
                         {getStatusIcon(t.name)}
                       </div>
+                      {isLatex && tags.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px', paddingLeft: '18px' }}>
+                          {tags.map(tag => (
+                            <span key={tag} style={{
+                              fontSize: '9px', lineHeight: 1,
+                              color: tag.includes('ATS') ? '#86efac' : tag.includes('视觉') ? '#fda4af' : '#ddd6fe',
+                              background: 'rgba(255,255,255,0.06)',
+                              border: '1px solid rgba(255,255,255,0.10)',
+                              borderRadius: '999px', padding: '3px 5px'
+                            }}>
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

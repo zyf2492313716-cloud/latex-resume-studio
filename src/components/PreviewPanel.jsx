@@ -3,9 +3,11 @@ import { Printer, FileText, Loader, Eye, EyeOff, Palette, Type, Space, Camera, S
 import { renderAsync } from 'docx-preview';
 import { polishText } from '../utils/aiParser';
 import SnapshotModal from './SnapshotModal';
+import InteractiveCanvas from './InteractiveCanvas';
 
 export default function PreviewPanel({
   previewDocxBase64,
+  previewImageBase64,
   previewLoading,
   onNotification,
   selectedTemplate,
@@ -13,10 +15,11 @@ export default function PreviewPanel({
   setResumeData,
   engineType,
   isDesensitized,
-  setIsDesensitized
+  setIsDesensitized,
+  layoutAdjustments,
+  setLayoutAdjustments
 }) {
   const [canvasScale, setCanvasScale] = useState(0.7);
-  const [layoutAdjustments, setLayoutAdjustments] = useState({});
 
   // Advanced Layout Control States (Used for spatial templates coordinate rewrites on the backend)
   const [themeColor, setThemeColor] = useState('');
@@ -29,6 +32,10 @@ export default function PreviewPanel({
   const [polishing, setPolishing] = useState(false);
 
   const docxContainerRef = React.useRef(null);
+  const docxRenderRequestRef = React.useRef(0);
+  const isLatex = engineType === 'latex' || selectedTemplate?.kind === 'latex' || selectedTemplate?.engineType === 'latex';
+  const isSpatial = engineType === 'spatial';
+  const [latexCompilerStatus, setLatexCompilerStatus] = useState(null);
 
   // Automatically trigger backend re-rendering when adjustments change in spatial mode
   useEffect(() => {
@@ -61,18 +68,65 @@ export default function PreviewPanel({
       window.electronAPI.onPdfFailed((msg) => onNotification({ type: 'warning', message: msg })),
     ];
 
-    return () => cleanups.forEach(fn => fn());
+    if (window.electronAPI.onLatexTexSaved) {
+      cleanups.push(window.electronAPI.onLatexTexSaved((msg) => onNotification({ type: 'success', message: msg })));
+    }
+    if (window.electronAPI.onLatexTexFailed) {
+      cleanups.push(window.electronAPI.onLatexTexFailed((msg) => onNotification({ type: 'warning', message: msg })));
+    }
+    if (window.electronAPI.onLatexPdfSaved) {
+      cleanups.push(window.electronAPI.onLatexPdfSaved((msg) => onNotification({ type: 'success', message: msg })));
+    }
+    if (window.electronAPI.onLatexPdfFailed) {
+      cleanups.push(window.electronAPI.onLatexPdfFailed((msg) => onNotification({ type: 'warning', message: msg })));
+    }
+
+    return () => cleanups.forEach(fn => fn && fn());
   }, [onNotification]);
 
-  const isSpatial = engineType === 'spatial';
+  useEffect(() => {
+    if (!isLatex || !window.electronAPI?.getLatexCompilerStatus) {
+      setLatexCompilerStatus(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLatexCompilerStatus(null);
+    window.electronAPI.getLatexCompilerStatus()
+      .then(status => {
+        if (!cancelled) setLatexCompilerStatus(status);
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setLatexCompilerStatus({
+            success: false,
+            compiler: {
+              available: false,
+              message: `无法检测 LaTeX 编译器：${err.message}`
+            }
+          });
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [isLatex, selectedTemplate?.name]);
 
   // 1:1 High fidelity render of docx in preview container via docx-preview
   useEffect(() => {
-    if (!previewDocxBase64 || !docxContainerRef.current) return;
-    
-    // Clear container HTML to prevent duplicate overlay appends
-    docxContainerRef.current.innerHTML = "";
-    
+    if (!previewDocxBase64 || previewImageBase64 || !docxContainerRef.current || isSpatial) return;
+
+    const requestId = docxRenderRequestRef.current + 1;
+    docxRenderRequestRef.current = requestId;
+    const visibleContainer = docxContainerRef.current;
+    let cancelled = false;
+
+    // docx-preview's stable public API renders into a real DOM element. Rendering
+    // into a detached/off-DOM staging node can lose styles/text in packaged
+    // Electron, so keep the official direct-container pattern and use request IDs
+    // only to ignore stale completions/notifications.
+    visibleContainer.removeEventListener('dblclick', handleDocxDblClick);
+    visibleContainer.innerHTML = "";
+
     // Base64 to ArrayBuffer conversion
     const binaryString = atob(previewDocxBase64);
     const len = binaryString.length;
@@ -81,28 +135,27 @@ export default function PreviewPanel({
       bytes[i] = binaryString.charCodeAt(i);
     }
     const arrayBuffer = bytes.buffer;
-    
-    renderAsync(arrayBuffer, docxContainerRef.current, null, {
+
+    renderAsync(arrayBuffer, visibleContainer, null, {
       className: "docx",
       inWrapper: false,
       ignoreWidth: true, // Let the layout fill parent container to prevent horizontal clipping
       ignoreHeight: false
     }).then(() => {
-      const container = docxContainerRef.current;
-      if (container) {
-        container.addEventListener('dblclick', handleDocxDblClick);
-      }
+      if (cancelled || requestId !== docxRenderRequestRef.current || !docxContainerRef.current) return;
+      visibleContainer.addEventListener('dblclick', handleDocxDblClick);
     }).catch(err => {
+      if (cancelled || requestId !== docxRenderRequestRef.current) return;
       console.error("docx-preview render error:", err);
       onNotification({ type: 'warning', message: `Word 高清预览渲染失败: ${err.message}` });
     });
-    
+
     return () => {
-      if (docxContainerRef.current) {
-        docxContainerRef.current.removeEventListener('dblclick', handleDocxDblClick);
-      }
+      cancelled = true;
+      docxRenderRequestRef.current += 1;
+      visibleContainer.removeEventListener('dblclick', handleDocxDblClick);
     };
-  }, [previewDocxBase64]);
+  }, [previewDocxBase64, previewImageBase64, isSpatial]);
 
   // Deep clone and obfuscate personal data fields for desensitized outputs
   const getDesensitizedData = (data) => {
@@ -119,6 +172,7 @@ export default function PreviewPanel({
       if (copy.basicInfo.wechat) {
         copy.basicInfo.wechat = '***';
       }
+      copy.basicInfo.photo = '';
     }
     return copy;
   };
@@ -273,15 +327,39 @@ export default function PreviewPanel({
     }
   };
 
-  // 100% "What You See Is What You Get" high-fidelity PDF printing
+  // 100% "What You See Is What You Get" high-fidelity PDF printing for DOCX,
+  // or backend LaTeX PDF compilation when a LaTeX template is selected.
   const handlePrint = () => {
+    if (isLatex) {
+      if (!window.electronAPI || !selectedTemplate) {
+        onNotification({ type: 'warning', message: '请先选择 LaTeX 模板' });
+        return;
+      }
+      if (latexCompilerStatus?.compiler && !latexCompilerStatus.compiler.available) {
+        onNotification({
+          type: 'warning',
+          message: latexCompilerStatus.compiler.message || '未检测到 LaTeX 编译器；当前可先导出 .tex。'
+        });
+        return;
+      }
+      const dataToExport = isDesensitized ? getDesensitizedData(resumeData) : resumeData;
+      onNotification({ type: 'info', message: '正在使用 LaTeX 编译 PDF...' });
+      window.electronAPI.exportLatexPdf(selectedTemplate.name, dataToExport);
+      return;
+    }
+
     let htmlContent = '';
-    if (docxContainerRef.current) {
-      const clone = docxContainerRef.current.cloneNode(true);
+    const sourceNode = previewImageBase64
+      ? docxContainerRef.current
+      : (isSpatial ? document.querySelector('.a4-sheet') : docxContainerRef.current);
+
+    if (sourceNode) {
+      const clone = sourceNode.cloneNode(true);
       clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+      clone.querySelectorAll('[data-editing]').forEach(el => el.removeAttribute('data-editing'));
       htmlContent = clone.outerHTML;
     }
-    
+
     if (!htmlContent) {
       onNotification({ type: 'warning', message: '生成打印文件内容为空，请稍后' });
       return;
@@ -304,9 +382,23 @@ export default function PreviewPanel({
       onNotification({ type: 'warning', message: '请先选择模板' });
       return;
     }
+    if (isLatex) {
+      onNotification({ type: 'warning', message: 'LaTeX 模板不支持 Word 导出，请使用“导出 .tex”或“编译 PDF”。' });
+      return;
+    }
     const dataToExport = isDesensitized ? getDesensitizedData(resumeData) : resumeData;
     onNotification({ type: 'info', message: `正在导出到 "${selectedTemplate.name}"...` });
     window.electronAPI.exportToWord(selectedTemplate.name, dataToExport, layoutAdjustments);
+  };
+
+  const handleExportLatexTex = () => {
+    if (!window.electronAPI || !selectedTemplate || !isLatex) {
+      onNotification({ type: 'warning', message: '请先选择 LaTeX 模板' });
+      return;
+    }
+    const dataToExport = isDesensitized ? getDesensitizedData(resumeData) : resumeData;
+    onNotification({ type: 'info', message: '正在生成 LaTeX 源文件...' });
+    window.electronAPI.exportLatexTex(selectedTemplate.name, dataToExport);
   };
 
   const handleApplySnapshot = (snappedData, snappedLayout) => {
@@ -326,21 +418,32 @@ export default function PreviewPanel({
         alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', zIndex: 100
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button onClick={handleExportWord} style={{
-            padding: '8px 14px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-            color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '12px', boxShadow: '0 4px 12px rgba(59,130,246,0.25)'
-          }}>
-            <FileText size={14} /> 导出 Word
-          </button>
+          {isLatex ? (
+            <button onClick={handleExportLatexTex} style={{
+              padding: '8px 14px', background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+              color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+              fontSize: '12px', boxShadow: '0 4px 12px rgba(139,92,246,0.25)'
+            }}>
+              <FileText size={14} /> 导出 .tex
+            </button>
+          ) : (
+            <button onClick={handleExportWord} style={{
+              padding: '8px 14px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+              color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+              fontSize: '12px', boxShadow: '0 4px 12px rgba(59,130,246,0.25)'
+            }}>
+              <FileText size={14} /> 导出 Word
+            </button>
+          )}
           <button onClick={handlePrint} style={{
-            padding: '8px 14px', background: 'linear-gradient(135deg, #10b981, #059669)',
+            padding: '8px 14px', background: isLatex ? 'linear-gradient(135deg, #14b8a6, #0f766e)' : 'linear-gradient(135deg, #10b981, #059669)',
             color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700,
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
             fontSize: '12px', boxShadow: '0 4px 12px rgba(16,185,129,0.25)'
           }}>
-            <Printer size={14} /> 导出 PDF
+            <Printer size={14} /> {isLatex ? '编译 PDF' : '导出 PDF'}
           </button>
 
           <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
@@ -392,6 +495,21 @@ export default function PreviewPanel({
           </div>
         )}
       </div>
+
+      {isLatex && (
+        <div className="print-hide" style={{
+          width: '100%', maxWidth: '850px', marginTop: '10px',
+          background: latexCompilerStatus?.compiler?.available ? 'rgba(20,184,166,0.10)' : 'rgba(245,158,11,0.10)',
+          border: `1px solid ${latexCompilerStatus?.compiler?.available ? 'rgba(20,184,166,0.25)' : 'rgba(245,158,11,0.25)'}`,
+          color: latexCompilerStatus?.compiler?.available ? '#5eead4' : '#fbbf24',
+          borderRadius: '10px', padding: '9px 12px', fontSize: '12px', lineHeight: 1.5
+        }}>
+          <strong>LaTeX 模板：</strong>
+          {latexCompilerStatus?.compiler?.available
+            ? `已检测到 ${latexCompilerStatus.compiler.name}，可编译 PDF；也可导出 .tex 到 Overleaf/本地继续调整。`
+            : (latexCompilerStatus?.compiler?.message || '正在检测 LaTeX 编译器；即使没有编译器，也可以先导出 .tex。')}
+        </div>
+      )}
 
       {/* Advanced Layout Customization Toolbar (Only visible for absolute layout spatial templates) */}
       {isSpatial && (
@@ -447,42 +565,96 @@ export default function PreviewPanel({
         </div>
       )}
 
-      {/* Render docx-preview output */}
-      <div className="a4-container" style={{
-        width: '794px', minHeight: '1123px',
-        background: '#fff', borderRadius: '4px',
-        overflow: 'hidden', position: 'relative',
-        transform: `scale(${canvasScale})`, transformOrigin: 'top center',
-        boxShadow: '0 8px 40px rgba(0,0,0,0.3)'
-      }}>
-        {previewLoading && (
-          <div style={{
-            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
-            justifyContent: 'center', background: 'rgba(255,255,255,0.85)', zIndex: 10
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280' }}>
-              <Loader size={20} className="animate-spin" />
-              <span>正在渲染高清模板预览...</span>
+      {/* Render final filled DOCX image first; fall back by template type only when image conversion is unavailable. */}
+      {previewImageBase64 || !isSpatial ? (
+        <div className="a4-container" style={{
+          width: '794px', minHeight: '1123px',
+          background: '#fff', borderRadius: '4px',
+          overflow: 'hidden', position: 'relative',
+          transform: `scale(${canvasScale})`, transformOrigin: 'top center',
+          boxShadow: '0 8px 40px rgba(0,0,0,0.3)'
+        }}>
+          {previewLoading && (
+            <div style={{
+              position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', background: 'rgba(255,255,255,0.85)', zIndex: 10
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280' }}>
+                <Loader size={20} className="animate-spin" />
+                <span>{isLatex ? '正在渲染 LaTeX PDF 预览...' : '正在渲染真实 Word 图片预览...'}</span>
+              </div>
             </div>
+          )}
+          {previewImageBase64 ? (
+            <div
+              ref={docxContainerRef}
+              className="preview-docx-container preview-image-container"
+              style={{ padding: '0', width: '100%', minHeight: '1123px', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}
+            >
+              <img
+                src={`data:image/png;base64,${previewImageBase64}`}
+                alt="简历预览"
+                style={{ width: '100%', height: 'auto', display: 'block', background: '#fff' }}
+              />
+            </div>
+          ) : previewDocxBase64 ? (
+            <div
+              ref={docxContainerRef}
+              className="preview-docx-container"
+              style={{ padding: '0', width: '100%', minHeight: '1123px' }}
+            />
+          ) : (
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', height: '1123px', color: '#9ca3af', gap: '10px'
+            }}>
+              <FileText size={32} />
+              <div style={{ fontSize: '14px' }}>{isLatex ? 'LaTeX PDF 图片预览暂不可用' : '请先在左侧编辑简历数据，右侧选择模板'}</div>
+              <div style={{ fontSize: '12px' }}>
+                {isLatex ? '当前可导出 .tex；安装 Tectonic/MacTeX 或配置 XeLaTeX 后可生成 PDF 预览。' : '选中模板后将自动生成预览'}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : previewLoading ? (
+        <div className="a4-container" style={{
+          width: '794px', minHeight: '1123px',
+          background: '#fff', borderRadius: '4px',
+          overflow: 'hidden', position: 'relative',
+          transform: `scale(${canvasScale})`, transformOrigin: 'top center',
+          boxShadow: '0 8px 40px rgba(0,0,0,0.3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', color: '#6b7280' }}>
+            <Loader size={28} className="animate-spin" />
+            <div style={{ fontSize: '15px', fontWeight: 700 }}>正在生成真实 Word 图片预览...</div>
+            <div style={{ fontSize: '12px' }}>空间模板不再先显示编辑画布，避免误把兜底画布当成最终效果。</div>
           </div>
-        )}
-        {previewDocxBase64 ? (
-          <div
-            ref={docxContainerRef}
-            className="preview-docx-container"
-            style={{ padding: '0', width: '100%', minHeight: '1123px' }}
-          />
-        ) : (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', height: '1123px', color: '#9ca3af', gap: '10px'
+        </div>
+      ) : (
+        <div style={{ position: 'relative' }}>
+          <div className="print-hide" style={{
+            maxWidth: '760px', margin: '0 auto 10px', padding: '8px 12px', borderRadius: '8px',
+            background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.22)',
+            color: '#fbbf24', fontSize: '12px', lineHeight: 1.5
           }}>
-            <FileText size={32} />
-            <div style={{ fontSize: '14px' }}>请先在左侧编辑简历数据，右侧选择模板</div>
-            <div style={{ fontSize: '12px' }}>选中模板后将自动生成预览</div>
+            真实 Word 图片预览暂不可用，当前显示空间编辑兜底画布，仅用于手动微调；最终效果请以导出的 DOCX 为准。
           </div>
-        )}
-      </div>
+          <InteractiveCanvas
+            templatePath={selectedTemplate?.path}
+            resumeData={resumeData}
+            setResumeData={setResumeData}
+            onNotification={onNotification}
+            canvasScale={canvasScale}
+            layoutAdjustments={layoutAdjustments}
+            setLayoutAdjustments={setLayoutAdjustments}
+            isDesensitized={isDesensitized}
+            themeColor={themeColor}
+            fontSizeOffset={fontSizeOffset}
+            spacingOffset={spacingOffset}
+          />
+        </div>
+      )}
 
       {/* AI Polish floating popup menu for flow layout templates */}
       {polishState && (
@@ -569,6 +741,7 @@ export default function PreviewPanel({
         .preview-docx-container {
           background: #ffffff;
           overflow-y: auto;
+          color: #1f2937;
         }
         .preview-docx-container .docx-wrapper {
           padding: 0 !important;

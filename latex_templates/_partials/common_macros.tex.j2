@@ -1,0 +1,51 @@
+% Common LaTeX macros shared by LaTeX Resume Studio templates.
+% Template code is original; external projects are used only as style references.
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+\usepackage{ragged2e}
+\usepackage{titlesec}
+\usepackage{ifthen}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\pagestyle{empty}
+\hypersetup{pdfauthor={{ basic.name }}, pdftitle={{ basic.name }} Resume}
+
+{% raw %}
+\newcommand{\rgSection}[1]{
+  \vspace{0.45em}
+  {\large\bfseries #1}\par\vspace{0.2em}
+  \hrule\vspace{0.45em}
+}
+
+\newcommand{\rgCompactSection}[1]{
+  \vspace{0.35em}
+  {\bfseries\large #1}\par\vspace{0.12em}
+}
+
+\newcommand{\rgEntry}[4]{
+  \begin{tabularx}{\linewidth}{@{}X r@{}}
+    \textbf{#1} & {\small #2} \\
+    {\small #3} & {\small #4} \\
+  \end{tabularx}\vspace{-0.25em}
+}
+
+\newcommand{\rgSimpleEntry}[2]{
+  \begin{tabularx}{\linewidth}{@{}X r@{}}
+    \textbf{#1} & {\small #2} \\
+  \end{tabularx}\vspace{-0.25em}
+}
+
+\newenvironment{rgBullets}{
+  \begin{itemize}[leftmargin=1.25em, itemsep=0.12em, topsep=0.15em, parsep=0em]
+}{
+  \end{itemize}\vspace{0.15em}
+}
+
+\newcommand{\rgSkillLine}[1]{\small #1\par\vspace{0.12em}}
+\newcommand{\rgMuted}[1]{{\color{gray}#1}}
+{% endraw %}

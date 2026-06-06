@@ -13,12 +13,15 @@ export default function App() {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [templateList, setTemplateList] = useState([]);
   const [previewDocxBase64, setPreviewDocxBase64] = useState('');
+  const [previewImageBase64, setPreviewImageBase64] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [showApiConfig, setShowApiConfig] = useState(false);
   const [templateEngineType, setTemplateEngineType] = useState('yaml');
   const [isDesensitized, setIsDesensitized] = useState(false);
+  const [layoutAdjustments, setLayoutAdjustments] = useState({});
   const previewTimerRef = React.useRef(null);
+  const previewRequestIdRef = React.useRef(0);
 
   // Deep clone and obfuscate personal data fields for desensitized outputs
   const getDesensitizedData = (data) => {
@@ -35,6 +38,7 @@ export default function App() {
       if (copy.basicInfo.wechat) {
         copy.basicInfo.wechat = '***';
       }
+      copy.basicInfo.photo = '';
     }
     return copy;
   };
@@ -55,29 +59,59 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (selectedTemplate && window.electronAPI) {
-      window.electronAPI.checkTemplateConfig(selectedTemplate.path).then(res => {
-        setTemplateEngineType(res.engineType || 'yaml');
-      });
+    if (!selectedTemplate || !window.electronAPI) {
+      setTemplateEngineType('yaml');
+      setPreviewDocxBase64('');
+      setPreviewImageBase64('');
+      return;
     }
-  }, [selectedTemplate]);
+
+    let cancelled = false;
+    const immediateEngineType = selectedTemplate.engineType || (selectedTemplate.kind === 'latex' ? 'latex' : 'yaml');
+    // Reset immediately so a previous template cannot leak stale DOCX/PNG preview
+    // into the newly-selected engine while config loads.
+    setTemplateEngineType(immediateEngineType);
+    setPreviewDocxBase64('');
+    setPreviewImageBase64('');
+    setLayoutAdjustments({});
+
+    window.electronAPI.checkTemplateConfig(selectedTemplate.path)
+      .then(res => {
+        if (!cancelled) setTemplateEngineType(res.engineType || immediateEngineType || 'yaml');
+      })
+      .catch(err => {
+        console.error('Template config check error:', err);
+        if (!cancelled) setTemplateEngineType(immediateEngineType || 'yaml');
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedTemplate?.name, selectedTemplate?.path, selectedTemplate?.engineType, selectedTemplate?.kind]);
 
   useEffect(() => {
     if (!selectedTemplate || !window.electronAPI) {
+      previewRequestIdRef.current += 1;
+      setPreviewDocxBase64('');
+      setPreviewImageBase64('');
       setPreviewLoading(false);
       return;
     }
+
     if (previewTimerRef.current) {
       clearTimeout(previewTimerRef.current);
     }
+
+    const requestId = previewRequestIdRef.current + 1;
+    previewRequestIdRef.current = requestId;
     previewTimerRef.current = setTimeout(() => {
       setPreviewLoading(true);
       const rawData = JSON.parse(JSON.stringify(resumeData));
       const dataForIpc = isDesensitized ? getDesensitizedData(rawData) : rawData;
-      window.electronAPI.renderPreview(selectedTemplate.name, dataForIpc)
+      window.electronAPI.renderPreview(selectedTemplate.name, dataForIpc, layoutAdjustments)
         .then(result => {
+          if (requestId !== previewRequestIdRef.current) return;
           if (result.success) {
-            setPreviewDocxBase64(result.docxBase64);
+            setPreviewDocxBase64(result.docxBase64 || '');
+            setPreviewImageBase64(result.previewImageBase64 || '');
           } else {
             console.error('Preview error:', result.error);
             showNotification({ type: 'warning', message: `预览渲染失败: ${result.error}` });
@@ -85,15 +119,16 @@ export default function App() {
           setPreviewLoading(false);
         })
         .catch(err => {
+          if (requestId !== previewRequestIdRef.current) return;
           console.error('Preview IPC error:', err);
           showNotification({ type: 'warning', message: `预览 IPC 错误: ${err.message}` });
           setPreviewLoading(false);
         });
-    }, 800);
+    }, 1500);
     return () => {
       if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
     };
-  }, [resumeData, selectedTemplate, templateEngineType, isDesensitized]);
+  }, [resumeData, selectedTemplate, templateEngineType, isDesensitized, layoutAdjustments]);
 
   const showNotification = useCallback(({ type, message }) => {
     setNotification({ type, message });
@@ -132,6 +167,7 @@ export default function App() {
 
       <PreviewPanel
         previewDocxBase64={previewDocxBase64}
+        previewImageBase64={previewImageBase64}
         previewLoading={previewLoading}
         onNotification={showNotification}
         selectedTemplate={selectedTemplate}
@@ -140,6 +176,8 @@ export default function App() {
         engineType={templateEngineType}
         isDesensitized={isDesensitized}
         setIsDesensitized={setIsDesensitized}
+        layoutAdjustments={layoutAdjustments}
+        setLayoutAdjustments={setLayoutAdjustments}
       />
 
       <TemplatePanel

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Plus, Trash2, ArrowUp, ArrowDown, Settings,
-  User, Briefcase, GraduationCap, FolderGit, Code, FlaskConical, Users, Award
+  User, Briefcase, GraduationCap, FolderGit, Code, FlaskConical, Users, Award,
+  Camera, Upload
 } from 'lucide-react';
 import { parseResumeText } from '../utils/aiParser';
 
@@ -20,6 +21,7 @@ export default function EditorPanel({ resumeData, setResumeData, onNotification,
   const [aiInput, setAiInput] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [apiConfig, setApiConfig] = useState(null);
+  const photoInputRef = useRef(null);
   const [enabledSections, setEnabledSections] = useState(() => {
     const saved = new Set(['education', 'experience', 'projects', 'skills']);
     ALL_SECTION_DEFS.forEach(s => {
@@ -62,18 +64,25 @@ export default function EditorPanel({ resumeData, setResumeData, onNotification,
     try {
       const config = apiConfig || { apiUrl: '', apiKey: '', modelName: '' };
       const { data, source, error } = await parseResumeText(aiInput, config);
-      setResumeData(data);
+      const mergedData = {
+        ...data,
+        basicInfo: {
+          ...data.basicInfo,
+          photo: data.basicInfo?.photo || resumeData.basicInfo?.photo || ''
+        }
+      };
+      setResumeData(mergedData);
 
       const counts = [];
-      if (data.basicInfo.name) counts.push(`姓名(${data.basicInfo.name})`);
-      if (data.basicInfo.title) counts.push(`意向(${data.basicInfo.title})`);
-      if (data.education.length) counts.push(`教育(${data.education.length}条)`);
-      if (data.experience.length) counts.push(`工作(${data.experience.length}条)`);
-      if (data.projects.length) counts.push(`项目(${data.projects.length}条)`);
-      if (data.research.length) counts.push(`科研(${data.research.length}条)`);
-      if (data.studentWork.length) counts.push(`学生(${data.studentWork.length}条)`);
-      if (data.honors.length) counts.push(`荣誉(${data.honors.length}条)`);
-      if (data.skills.length) counts.push(`技能(${data.skills.length}项)`);
+      if (mergedData.basicInfo.name) counts.push(`姓名(${mergedData.basicInfo.name})`);
+      if (mergedData.basicInfo.title) counts.push(`意向(${mergedData.basicInfo.title})`);
+      if (mergedData.education.length) counts.push(`教育(${mergedData.education.length}条)`);
+      if (mergedData.experience.length) counts.push(`工作(${mergedData.experience.length}条)`);
+      if (mergedData.projects.length) counts.push(`项目(${mergedData.projects.length}条)`);
+      if (mergedData.research.length) counts.push(`科研(${mergedData.research.length}条)`);
+      if (mergedData.studentWork.length) counts.push(`学生(${mergedData.studentWork.length}条)`);
+      if (mergedData.honors.length) counts.push(`荣誉(${mergedData.honors.length}条)`);
+      if (mergedData.skills.length) counts.push(`技能(${mergedData.skills.length}项)`);
       const summary = counts.length > 0 ? `已提取: ${counts.join(', ')}` : '未提取到结构化信息';
 
       if (source === 'fallback') {
@@ -95,8 +104,43 @@ export default function EditorPanel({ resumeData, setResumeData, onNotification,
     setResumeData(prev => ({ ...prev, basicInfo: { ...prev.basicInfo, [field]: val } }));
   };
 
+  const handlePhotoSelected = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      onNotification({ type: 'warning', message: '请选择图片文件作为头像' });
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      onNotification({ type: 'warning', message: '头像图片过大，请选择 12MB 以内的图片' });
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      handleBasicChange('photo', reader.result || '');
+      onNotification({ type: 'success', message: '头像已上传，预览将自动替换模板默认照片' });
+      event.target.value = '';
+    };
+    reader.onerror = () => {
+      onNotification({ type: 'warning', message: '头像读取失败，请重试' });
+      event.target.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removePhoto = () => {
+    handleBasicChange('photo', '');
+    onNotification({ type: 'info', message: '已移除头像' });
+  };
+
+  const isLatex = engineType === 'latex';
+  const isAutoLayoutEngine = engineType === 'docxtpl' || isLatex;
+
   const isLimitReached = (key) => {
-    if (engineType === 'docxtpl') return false;
+    if (isAutoLayoutEngine) return false;
     const limitSections = ['education', 'experience', 'projects', 'research', 'studentWork'];
     if (!limitSections.includes(key)) return false;
     return (resumeData[key] || []).length >= 2;
@@ -259,22 +303,24 @@ export default function EditorPanel({ resumeData, setResumeData, onNotification,
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
-              background: engineType === 'docxtpl' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.08)',
-              border: `1px solid ${engineType === 'docxtpl' ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.2)'}`,
-              color: engineType === 'docxtpl' ? '#34d399' : '#fbbf24',
+              background: isLatex ? 'rgba(139,92,246,0.10)' : (engineType === 'docxtpl' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.08)'),
+              border: `1px solid ${isLatex ? 'rgba(139,92,246,0.28)' : (engineType === 'docxtpl' ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.2)')}`,
+              color: isLatex ? '#c4b5fd' : (engineType === 'docxtpl' ? '#34d399' : '#fbbf24'),
               marginBottom: '4px'
             }}>
-              <span style={{ fontSize: '18px', display: 'flex', alignItems: 'center' }}>
-                {engineType === 'docxtpl' ? '✨' : '⚠️'}
+              <span style={{ fontSize: isLatex ? '12px' : '18px', fontWeight: 800, display: 'flex', alignItems: 'center' }}>
+                {isLatex ? 'TeX' : (engineType === 'docxtpl' ? '✨' : '⚠️')}
               </span>
               <div>
                 <strong style={{ fontWeight: 600 }}>
-                  {engineType === 'docxtpl' ? '精雕排版模版已启用' : '固定单页排版模版'}
+                  {isLatex ? 'LaTeX 自动排版模版已启用' : (engineType === 'docxtpl' ? '精雕排版模版已启用' : '固定单页排版模版')}
                 </strong>
                 <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '2px', lineHeight: '1.4' }}>
-                  {engineType === 'docxtpl' 
-                    ? '支持多条经历自动延展分页，排版100%可靠，无条数限制。' 
-                    : '建议教育背景和工作经历各控制在 2 条以内，超出可能发生排版重叠溢出。'}
+                  {isLatex
+                    ? '支持自动分页与稳定排版，不受普通 DOCX 单页模板的 2 条经历限制；可导出 .tex，并在检测到编译器后生成 PDF。'
+                    : engineType === 'docxtpl'
+                      ? '支持多条经历自动延展分页，排版100%可靠，无条数限制。'
+                      : '建议教育背景和工作经历各控制在 2 条以内，超出可能发生排版重叠溢出。'}
                 </div>
               </div>
             </div>
@@ -293,6 +339,45 @@ export default function EditorPanel({ resumeData, setResumeData, onNotification,
                       onChange={e => handleBasicChange(f, e.target.value)} style={inputStyle} />
                   </div>
                 ))}
+              </div>
+
+              <div style={{ ...cardStyle, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '58px', height: '58px', borderRadius: '12px', overflow: 'hidden',
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                }}>
+                  {resumeData.basicInfo.photo ? (
+                    <img src={resumeData.basicInfo.photo} alt="头像预览" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <Camera size={22} style={{ color: '#6b7280' }} />
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#e5e7eb', marginBottom: '4px' }}>头像 / 照片</div>
+                  <div style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', lineHeight: 1.45 }}>
+                    上传后会自动替换模板里的默认照片，并按照片框中心裁剪缩放；隐私打码导出会自动移除头像。
+                  </div>
+                  <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelected} style={{ display: 'none' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  <button onClick={() => photoInputRef.current?.click()} style={{
+                    background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.25)', color: 'var(--color-accent)',
+                    borderRadius: '6px', padding: '6px 9px', cursor: 'pointer', fontSize: '11px', fontWeight: 700,
+                    display: 'flex', alignItems: 'center', gap: '4px'
+                  }}>
+                    <Upload size={12} /> {resumeData.basicInfo.photo ? '更换' : '上传'}
+                  </button>
+                  {resumeData.basicInfo.photo && (
+                    <button onClick={removePhoto} style={{
+                      background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.2)', color: 'var(--color-danger)',
+                      borderRadius: '6px', padding: '6px 8px', cursor: 'pointer', fontSize: '11px', fontWeight: 700,
+                      display: 'flex', alignItems: 'center', gap: '4px'
+                    }}>
+                      <Trash2 size={12} /> 移除
+                    </button>
+                  )}
+                </div>
               </div>
               <div style={{ marginTop: '8px' }}>
                 <label style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>个人总结</label>

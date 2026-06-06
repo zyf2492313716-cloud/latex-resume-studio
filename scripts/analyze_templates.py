@@ -12,7 +12,7 @@ TEMPLATE_NAMES = [
     "活泼单页06", "稳重单页02",
 ]
 
-TEMPLATES_DIR = "/Users/zhouyufeng/opencode/web/resume-generator/templates"
+TEMPLATES_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'templates'))
 
 SECTION_HEADERS = [
     '教育背景', '工作经历', '自我评价', '基本信息', '个人信息',
@@ -155,4 +155,4 @@ def analyze_template(template_path, name):
             para_text = get_para_text(para)[:100]
             print(f"  p{pi}: has w:tab -> \"{para_text}\"")
 
-analyze_template("/Users/zhouyufeng/opencode/web/resume-generator/templates/简约单页01.docx", "简约单页01")
+analyze_template(os.path.join(TEMPLATES_DIR, "简约单页01.docx"), "简约单页01")

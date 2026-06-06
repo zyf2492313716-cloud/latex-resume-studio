@@ -1,0 +1,92 @@
+\documentclass[10pt,a4paper]{ctexart}
+{% include "_partials/common_macros.tex.j2" %}
+\geometry{left=1.35cm,right=1.35cm,top=1.25cm,bottom=1.25cm}
+\definecolor{accent}{HTML}{0F766E}
+\definecolor{muted}{HTML}{4B5563}
+\renewcommand{\rgCompactSection}[1]{\vspace{0.55em}{\bfseries\large\color{accent}#1}\par\vspace{0.12em}{\color{accent}\rule{\linewidth}{0.7pt}}\vspace{0.25em}}
+\setlist[itemize]{label={\color{accent}\tiny\textbullet}, leftmargin=1.1em, itemsep=0.08em, topsep=0.12em}
+
+\begin{document}
+{\Huge\bfseries {{ basic.name }}}\par
+{% if basic.title %}{\Large\color{accent}{{ basic.title }}}\par{% endif %}
+\vspace{0.15em}
+{\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\quad | \quad{% endif %}{{ contact.value }}{% endfor %}}\par
+\vspace{0.5em}
+{\color{accent}\rule{\linewidth}{1.2pt}}\par\vspace{0.5em}
+
+\begin{minipage}[t]{0.32\linewidth}
+{% if basic.summary %}
+\rgCompactSection{个人概要}
+{\small {{ basic.summary }}}\par
+{% endif %}
+
+{% if skills %}
+\rgCompactSection{技能}
+{% for skill in skills %}{\small {{ skill }}}\par\vspace{0.18em}
+{% endfor %}
+{% endif %}
+
+{% if education %}
+\rgCompactSection{教育}
+{% for e in education %}
+{\bfseries {{ e.school }}}\par
+{\small {{ e.degree }}{% if e.degree and e.major %} · {% endif %}{{ e.major }}}\par
+{\small\color{muted}{{ e.date }}}\par\vspace{0.25em}
+{% endfor %}
+{% endif %}
+
+{% if honors %}
+\rgCompactSection{荣誉}
+\begin{itemize}
+{% for item in honors %}\item {\small {{ item }}}
+{% endfor %}\end{itemize}
+{% endif %}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.64\linewidth}
+{% if experience %}
+\rgCompactSection{工作经历}
+{% for e in experience %}
+\rgSimpleEntry{ {{ e.company }} }{ {{ e.date }} }
+{\small\color{accent}{{ e.role }}}\par
+{% if e.bullets %}\begin{itemize}
+{% for bullet in e.bullets %}\item {\small {{ bullet }}}
+{% endfor %}\end{itemize}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if projects %}
+\rgCompactSection{项目经历}
+{% for p in projects %}
+\rgSimpleEntry{ {{ p.name }} }{ {{ p.date }} }
+{\small\color{accent}{{ p.role }}}\par
+{% if p.bullets %}\begin{itemize}
+{% for bullet in p.bullets %}\item {\small {{ bullet }}}
+{% endfor %}\end{itemize}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if research %}
+\rgCompactSection{研究经历}
+{% for r in research %}
+\rgSimpleEntry{ {{ r.name }} }{ {{ r.date }} }
+{\small\color{accent}{{ r.role }}}\par
+{% if r.bullets %}\begin{itemize}
+{% for bullet in r.bullets %}\item {\small {{ bullet }}}
+{% endfor %}\end{itemize}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if studentWork %}
+\rgCompactSection{学生工作}
+{% for s in studentWork %}
+\rgSimpleEntry{ {{ s.organization }} }{ {{ s.date }} }
+{\small\color{accent}{{ s.role }}}\par
+{% if s.bullets %}\begin{itemize}
+{% for bullet in s.bullets %}\item {\small {{ bullet }}}
+{% endfor %}\end{itemize}{% endif %}
+{% endfor %}
+{% endif %}
+\end{minipage}
+
+\end{document}

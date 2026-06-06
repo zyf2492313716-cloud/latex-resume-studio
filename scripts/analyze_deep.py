@@ -5,7 +5,7 @@ import os
 import re
 
 NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
-TEMPLATES_DIR = "/Users/zhouyufeng/opencode/web/resume-generator/templates"
+TEMPLATES_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'templates'))
 
 TEMPLATES = [
     "简约单页01", "稳重单页01", "知页简历01", "知页简历02",

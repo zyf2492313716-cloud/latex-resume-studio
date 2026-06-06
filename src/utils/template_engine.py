@@ -59,6 +59,123 @@ _NSMAP = {
 for prefix, uri in _NSMAP.items():
     ET.register_namespace(prefix, uri)
 
+XML_NS = 'http://www.w3.org/XML/1998/namespace'
+
+
+def _get_bundled_templates_dir():
+    """Return bundled templates dir in both dev (project/templates) and packaged (resources/templates)."""
+    here = _os.path.dirname(_os.path.abspath(__file__))
+    candidates = [
+        _os.path.abspath(_os.path.join(here, '..', 'templates')),
+        _os.path.abspath(_os.path.join(here, '..', '..', 'templates')),
+    ]
+    for d in candidates:
+        if _os.path.isdir(d):
+            return d
+    return candidates[0]
+
+
+def _cleanup_docx_preview_artifacts(output_path: str):
+    """Remove source-less VML image placeholders that QuickLook renders as gray blocks."""
+    try:
+        from photo_replace import cleanup_empty_vml_imagedata
+        result = cleanup_empty_vml_imagedata(output_path)
+        if result.get('removed'):
+            print(f"docx_cleanup:preview_artifacts:{result.get('removed')}", file=sys.stderr)
+        elif result.get('warning'):
+            print(f"docx_cleanup:WARN:{result.get('warning')}", file=sys.stderr)
+        return result
+    except Exception as exc:
+        print(f"docx_cleanup:WARN:{exc}", file=sys.stderr)
+        return None
+
+
+def _apply_photo_replacement_if_needed(output_path: str, data: dict):
+    """Post-process a filled DOCX with the uploaded portrait, if present.
+
+    Avatar replacement must never make an otherwise valid Word export fail.  The
+    detailed diagnostics are emitted to stderr for validation scripts and preview
+    debugging, while callers still receive their filled document.
+    """
+    try:
+        photo_value = (data or {}).get('basicInfo', {}).get('photo', '')
+        if not photo_value:
+            return None
+        from photo_replace import replace_photo_in_docx
+        result = replace_photo_in_docx(output_path, photo_value)
+        if result.get('replaced'):
+            media = ','.join(result.get('replaced_media', []))
+            print(f"photo_replace:OK:{media}", file=sys.stderr)
+        else:
+            warnings = '|'.join(result.get('warnings', [])) or 'unknown'
+            print(f"photo_replace:WARN:{warnings}", file=sys.stderr)
+        return result
+    except Exception as exc:
+        print(f"photo_replace:WARN:{exc}", file=sys.stderr)
+        return None
+
+
+def _set_xml_space_if_needed(t_node, text):
+    if text and (text[:1].isspace() or text[-1:].isspace()):
+        t_node.set(f'{{{XML_NS}}}space', 'preserve')
+    elif f'{{{XML_NS}}}space' in t_node.attrib:
+        del t_node.attrib[f'{{{XML_NS}}}space']
+
+
+def _find_parent_run(node):
+    parent = node.getparent()
+    while parent is not None:
+        if parent.tag == f'{{{NS}}}r':
+            return parent
+        parent = parent.getparent()
+    return None
+
+
+def _ensure_run_font_size(run, half_points='16'):
+    """Set run font size, preserving existing rPr and using half-point units."""
+    if run is None:
+        return
+    rPr = run.find(f'{{{NS}}}rPr')
+    if rPr is None:
+        rPr = ET.Element(f'{{{NS}}}rPr')
+        run.insert(0, rPr)
+    for tag in ('sz', 'szCs'):
+        node = rPr.find(f'{{{NS}}}{tag}')
+        if node is None:
+            node = ET.Element(f'{{{NS}}}{tag}')
+            rPr.append(node)
+        node.set(f'{{{NS}}}val', half_points)
+
+
+def _write_text_node_with_breaks(t_node, value):
+    """Write text into a w:t node, converting literal \n into w:br siblings.
+
+    Returns newly-created w:t nodes so callers can mark them as modified.
+    """
+    value = '' if value is None else str(value)
+    parts = value.split('\n')
+    t_node.text = parts[0]
+    _set_xml_space_if_needed(t_node, parts[0])
+
+    inserted_text_nodes = []
+    parent = t_node.getparent()
+    if len(parts) > 1 and parent is not None:
+        insert_at = parent.index(t_node) + 1
+        for part in parts[1:]:
+            br = ET.Element(f'{{{NS}}}br')
+            new_t = ET.Element(f'{{{NS}}}t')
+            new_t.text = part
+            _set_xml_space_if_needed(new_t, part)
+            parent.insert(insert_at, br)
+            insert_at += 1
+            parent.insert(insert_at, new_t)
+            insert_at += 1
+            inserted_text_nodes.append(new_t)
+
+    if '@' in value and len(value) > 18:
+        _ensure_run_font_size(_find_parent_run(t_node), '16')
+    return inserted_text_nodes
+
 # All known section headers for boundary detection
 ALL_SECTION_HEADERS = [
     '教育背景', '教育经历', '工作经历', '工作经验', '实习经历',
@@ -141,8 +258,10 @@ class TemplateEngine:
         return ''.join(texts).strip()
 
     def _set_node_text(self, t_node, value):
-        t_node.text = value
+        inserted = _write_text_node_with_breaks(t_node, value)
         self._modified_nodes.add(t_node)
+        for new_t in inserted:
+            self._modified_nodes.add(new_t)
 
     def _clear_node_text(self, t_node):
         t_node.text = ''
@@ -391,7 +510,6 @@ class TemplateEngine:
     def _fill_section_replace(self, header_text, value):
         header_paras = self._find_section_paras(header_text)
         if not header_paras:
-            self._warn(f"Section header '{header_text}' not found")
             return False
 
         filled = False
@@ -528,7 +646,6 @@ class TemplateEngine:
     def _fill_entry_schema(self, header_text, entry_schema, entries, item_separator='paragraph'):
         header_paras = self._find_section_paras(header_text)
         if not header_paras:
-            self._warn(f"Section header '{header_text}' not found")
             return False
 
         for header_pi, _ in header_paras:
@@ -545,6 +662,154 @@ class TemplateEngine:
                 return True
 
         return False
+
+    def _fill_entry_global_fallback(self, entry_schema, entries):
+        """Last-resort entry fill for templates where content is far from its header."""
+        entry_paras = []
+        for pi, p in enumerate(self.paragraphs):
+            if pi in self.giant_para_indices:
+                continue
+            own = self._get_own_text_nodes(p)
+            if not own:
+                continue
+            full_text = self._get_para_full_text(p)
+            if not full_text or self._is_section_header(full_text) or self._is_label_text(full_text):
+                continue
+            entry_paras.append((pi, p))
+        return self._try_fill_entries(entry_paras, entry_schema, entries) > 0
+
+    def _fill_title_fallback(self, value):
+        """Fill job-title/target placeholders when YAML only had a missing label."""
+        title_placeholders = [
+            '平面设计', '网页设计师', '美术主编', 'UI设计师', '销售员岗位',
+            '产品经理', '运营专员', '行政助理', '市场专员', '数控编程师', '营销经理',
+            '应聘岗位', '目标职位', '求职目标', '职位名称', '岗位名称', '意向岗位',
+        ]
+        if self._fill_keyword_global(title_placeholders, value, 'keyword_substring', replace_all=True):
+            return True
+
+        for pattern in ['求职意向', '目标职位', '应聘职位', '应聘岗位', '意向岗位', '职位', '岗位']:
+            for pi, p in enumerate(self.paragraphs):
+                if pi in self.giant_para_indices:
+                    continue
+                if self._match_label_inline(p, pattern, value):
+                    return True
+
+        # Last resort for templates whose job title is a standalone short headline near the top.
+        candidate_text = None
+        for pi, p in enumerate(self.paragraphs):
+            if pi in self.giant_para_indices:
+                continue
+            own = self._get_own_text_nodes(p)
+            full_text = self._get_para_full_text(p)
+            if not own or not full_text or any(t in self._modified_nodes for t in own):
+                continue
+            if self._is_section_header(full_text) or self._is_label_text(full_text):
+                continue
+            if '@' in full_text or re.search(r'\d{4,}|\d{2,}岁', full_text):
+                continue
+            if len(full_text) <= 30 and (pi < 25 or any(k in full_text for k in ['岗位', '职位', '专员', '经理', '设计', '工程师', '实习', '运营', '市场'])):
+                candidate_text = full_text
+                break
+        if candidate_text:
+            filled = False
+            for pi, p in enumerate(self.paragraphs):
+                if pi in self.giant_para_indices:
+                    continue
+                own = self._get_own_text_nodes(p)
+                if own and self._get_para_full_text(p) == candidate_text:
+                    self._set_node_text(own[0], value)
+                    for t in own[1:]:
+                        self._clear_node_text(t)
+                    filled = True
+            if filled:
+                return True
+        return False
+
+    def _fill_summary_fallback(self, value):
+        """Fill a plausible long-text summary placeholder when a configured header is absent."""
+        summary_markers = ['自我评价', '个人介绍', '个人总结', '自我介绍', '个人陈述', '个人简介', '个人评价', '关于我']
+        skip_markers = ['电话', '手机', '邮箱', 'Email', '教育', '经历', '技能', '荣誉', '证书', '工作', '实习']
+
+        # Prefer paragraphs that mention a summary marker but include placeholder content.
+        for pi, p in enumerate(self.paragraphs):
+            if pi in self.giant_para_indices:
+                continue
+            own = self._get_own_text_nodes(p)
+            full_text = self._get_para_full_text(p)
+            if own and any(m in full_text for m in summary_markers) and full_text not in summary_markers:
+                self._set_node_text(own[0], value)
+                for t in own[1:]:
+                    self._clear_node_text(t)
+                return True
+
+        # Last resort: replace an untouched, non-structural long paragraph.
+        for pi, p in enumerate(self.paragraphs):
+            if pi in self.giant_para_indices:
+                continue
+            own = self._get_own_text_nodes(p)
+            full_text = self._get_para_full_text(p)
+            if not own or not full_text or any(t in self._modified_nodes for t in own):
+                continue
+            if self._is_section_header(full_text) or any(m in full_text for m in skip_markers):
+                continue
+            if 20 <= len(full_text) <= 220:
+                self._set_node_text(own[0], value)
+                for t in own[1:]:
+                    self._clear_node_text(t)
+                return True
+        return False
+
+    def _ensure_contact_fields(self, basic):
+        """Ensure required phone/email text exists even when a template lacks explicit placeholders."""
+        doc_text = ''.join(t.text or '' for t in self.root.iter(f'{{{NS}}}t'))
+        missing_parts = []
+        phone = basic.get('phone')
+        email = basic.get('email')
+        if phone and phone not in doc_text:
+            missing_parts.append(phone)
+        if email and email not in doc_text:
+            missing_parts.append(email)
+        if not missing_parts:
+            return False
+
+        contact_labels = ['电话', '手机', '邮箱', 'Email', 'E-mail', '联系方式', '联系我', 'CONTACT', 'QQ', '微信']
+        target = None
+
+        # Prefer an existing contact/basic-info paragraph.
+        for pi, p in enumerate(self.paragraphs):
+            if pi in self.giant_para_indices:
+                continue
+            own = self._get_own_text_nodes(p)
+            full_text = self._get_para_full_text(p)
+            if not own or not full_text:
+                continue
+            if (phone and phone in full_text) or any(label in full_text for label in contact_labels):
+                target = (own, full_text)
+                break
+
+        # Fallback to an early short personal-info paragraph.
+        if target is None:
+            for pi, p in enumerate(self.paragraphs[:40]):
+                if pi in self.giant_para_indices:
+                    continue
+                own = self._get_own_text_nodes(p)
+                full_text = self._get_para_full_text(p)
+                if not own or not full_text or self._is_section_header(full_text):
+                    continue
+                if len(full_text) <= 60 and not any(h in full_text for h in ['教育', '工作', '经历', '技能', '荣誉']):
+                    target = (own, full_text)
+                    break
+
+        if target is None:
+            return False
+
+        own, full_text = target
+        separator = ' | ' if full_text else ''
+        self._set_node_text(own[0], full_text + separator + ' | '.join(missing_parts))
+        for t in own[1:]:
+            self._clear_node_text(t)
+        return True
 
     # ── Main fill method ───────────────────────────────────────────────
     def fill(self, data: dict, output_path: str) -> bool:
@@ -570,6 +835,7 @@ class TemplateEngine:
                 any_filled = True
 
         # Fill non-group basic_info fields
+        unfilled_basic_fields = []
         for field_name, field_cfg in non_group_fields.items():
             value = basic.get(field_name)
             if not value:
@@ -640,9 +906,30 @@ class TemplateEngine:
                 section = field_cfg.get('section', '')
                 filled = self._fill_section_replace(section, value)
 
+            if not filled and field_name == 'title':
+                filled = self._fill_title_fallback(value)
+            if not filled and field_name == 'summary':
+                filled = self._fill_summary_fallback(value)
+
             if not filled:
-                self._warn(f"Field '{field_name}' not filled (type={ftype})")
+                unfilled_basic_fields.append((field_name, ftype))
             else:
+                any_filled = True
+
+        if self._ensure_contact_fields(basic):
+            any_filled = True
+
+        doc_text_after_basic = ''.join(t.text or '' for t in self.root.iter(f'{{{NS}}}t'))
+        if basic.get('summary') and str(basic.get('summary')) not in doc_text_after_basic and 'summary' not in non_group_fields:
+            if self._fill_summary_fallback(str(basic.get('summary'))):
+                any_filled = True
+                doc_text_after_basic = ''.join(t.text or '' for t in self.root.iter(f'{{{NS}}}t'))
+
+        for field_name, ftype in unfilled_basic_fields:
+            value = basic.get(field_name)
+            if value and str(value) not in doc_text_after_basic:
+                self._warn(f"Field '{field_name}' not filled (type={ftype})")
+            elif value:
                 any_filled = True
 
         # Fill sections (education, experience, etc.)
@@ -669,7 +956,10 @@ class TemplateEngine:
                     continue
                 schema = sec_cfg['entry_schema']
                 sep = sec_cfg.get('item_separator', 'paragraph')
-                if self._fill_entry_schema(header, schema, entries, sep):
+                filled_entries = self._fill_entry_schema(header, schema, entries, sep)
+                if not filled_entries:
+                    filled_entries = self._fill_entry_global_fallback(schema, entries)
+                if filled_entries:
                     any_filled = True
                 else:
                     self._warn(f"Section '{sec_name}' entries not filled")
@@ -706,6 +996,9 @@ class TemplateEngine:
                                 self._clear_node_text(t)
                             break
 
+            # Keep post-processed placeholder replacements from being blanked by cleanup.
+            self._fill_modified.update(self._modified_nodes)
+
         # Post-processing: clear paragraphs that were NOT modified by the fill.
         # For templates with duplicated content (two text box areas),
         # the engine fills one copy but leaves the other untouched.
@@ -741,6 +1034,8 @@ class TemplateEngine:
                 self._clear_node_text(t)
 
         self._save(output_path)
+        _cleanup_docx_preview_artifacts(output_path)
+        _apply_photo_replacement_if_needed(output_path, data)
         return any_filled
 
     def _save(self, output_path: str):
@@ -765,6 +1060,8 @@ def fill_with_docxtpl(template_path: str, data: dict, output_path: str) -> bool:
         context = {}
         basic = data.get('basicInfo', {})
         for k, v in basic.items():
+            if k == 'photo':
+                continue
             context[k] = v
             
         # Explicit mapping for basic info fields
@@ -923,6 +1220,8 @@ def fill_with_docxtpl(template_path: str, data: dict, output_path: str) -> bool:
         except Exception as pe:
             print(f"Post-processing warning: {pe}", file=_sys.stderr)
 
+        _cleanup_docx_preview_artifacts(output_path)
+        _apply_photo_replacement_if_needed(output_path, data)
         print(f"{_os.path.basename(template_path)}:docxtpl:OK", file=_sys.stderr)
         return True
     except Exception as e:
@@ -978,7 +1277,7 @@ def fill_with_fallback(template_path: str, data: dict, output_path: str, layout_
     # Level 1: Check for manually marked template (.docxtpl.docx)
     docxtpl_path = template_path.replace('.docx', '.docxtpl.docx')
     if not os.path.exists(docxtpl_path):
-        bundled_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'templates'))
+        bundled_dir = _get_bundled_templates_dir()
         alt_docxtpl = os.path.join(bundled_dir, os.path.basename(docxtpl_path))
         if os.path.exists(alt_docxtpl):
             docxtpl_path = alt_docxtpl
@@ -992,7 +1291,7 @@ def fill_with_fallback(template_path: str, data: dict, output_path: str, layout_
 
     # White-listed templates that perform much better with spatial engine
     spatial_whitelist = {
-        "文艺单页04", "文艺单页07", "文艺单页09", "文艺单页16",
+        "文艺单页03", "文艺单页04", "文艺单页07", "文艺单页09", "文艺单页16",
         "活泼单页12", "知页简历02", "知页简历03", "稳重单页01", "稳重单页21",
         "简约单页18", "简约单页19", "简约单页30",
         "文艺单页10", "文艺单页12", "稳重单页06", "稳重单页12", "稳重单页20", "简约单页25"
@@ -1012,7 +1311,7 @@ def fill_with_fallback(template_path: str, data: dict, output_path: str, layout_
     # Level 2: YAML config (for flow layouts)
     config_path = template_path.replace('.docx', '.yaml')
     if not os.path.exists(config_path):
-        bundled_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'templates'))
+        bundled_dir = _get_bundled_templates_dir()
         alt_config = os.path.join(bundled_dir, os.path.basename(config_path))
         if os.path.exists(alt_config):
             config_path = alt_config
@@ -1037,6 +1336,8 @@ def fill_with_fallback(template_path: str, data: dict, output_path: str, layout_
     from docx_filler_v2 import fill_template as v2_fill
     try:
         v2_fill(template_path, data, output_path)
+        _cleanup_docx_preview_artifacts(output_path)
+        _apply_photo_replacement_if_needed(output_path, data)
         print(f"{os.path.basename(template_path)}:v2:OK", file=sys.stderr)
         return True
     except Exception as e:

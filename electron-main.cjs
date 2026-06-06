@@ -1,20 +1,41 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { execSync, exec } = require('child_process');
+const { execSync, exec, execFile } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const mammoth = require('mammoth');
 
+const RESUME_USER_DATA_SUFFIX = (process.env.RESUME_USER_DATA_SUFFIX || 'latex-resume-studio').replace(/[^A-Za-z0-9_.-]+/g, '-');
+if (RESUME_USER_DATA_SUFFIX) {
+  const currentUserData = app.getPath('userData');
+  app.setPath('userData', `${currentUserData}-${RESUME_USER_DATA_SUFFIX}`);
+}
+try { fs.mkdirSync(app.getPath('userData'), { recursive: true }); } catch (e) {}
+const RESUME_DEV_PORT = Number(process.env.RESUME_DEV_PORT || 3101);
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
+console.log('[LaTeX Resume Studio] userData:', app.getPath('userData'));
+console.log('[LaTeX Resume Studio] devPort:', RESUME_DEV_PORT);
 const BUNDLED_TEMPLATES = app.isPackaged
   ? path.join(process.resourcesPath, 'templates')
   : path.join(__dirname, 'templates');
+const LATEX_TEMPLATES_DIR = process.env.LATEX_TEMPLATES_DIR
+  ? path.resolve(process.env.LATEX_TEMPLATES_DIR)
+  : (app.isPackaged ? path.join(process.resourcesPath, 'latex_templates') : path.join(__dirname, 'latex_templates'));
 const FILLER_SCRIPT = app.isPackaged
   ? path.join(process.resourcesPath, 'utils', 'docx_filler_v2.py')
   : path.join(__dirname, 'src/utils/docx_filler_v2.py');
 const ENGINE_SCRIPT = app.isPackaged
   ? path.join(process.resourcesPath, 'utils', 'template_engine.py')
   : path.join(__dirname, 'src/utils/template_engine.py');
+const PHOTO_SCRIPT = app.isPackaged
+  ? path.join(process.resourcesPath, 'utils', 'photo_replace.py')
+  : path.join(__dirname, 'src/utils/photo_replace.py');
+const LATEX_RENDERER_SCRIPT = app.isPackaged
+  ? path.join(process.resourcesPath, 'utils', 'latex_renderer.py')
+  : path.join(__dirname, 'src/utils/latex_renderer.py');
+const WINDOW_ICON = app.isPackaged
+  ? path.join(__dirname, 'dist', 'app-icon.png')
+  : path.join(__dirname, 'public', 'app-icon.png');
 
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')); } catch (e) { return {}; }
@@ -44,7 +65,7 @@ function getTemplatesDir() {
 
 let mainWindow = null;
 
-function scanTemplates() {
+function scanDocxTemplates() {
   try {
     const dir = getTemplatesDir();
     if (!dir || !fs.existsSync(dir)) return [];
@@ -54,18 +75,60 @@ function scanTemplates() {
     return files.map(name => ({
       name,
       displayName: name.replace('.docx', ''),
-      path: path.join(dir, name)
+      path: path.join(dir, name),
+      kind: 'docx'
     }));
   } catch (e) {
-    console.error('Scan templates error:', e);
+    console.error('Scan DOCX templates error:', e);
     return [];
   }
+}
+
+function scanLatexTemplates() {
+  try {
+    if (!LATEX_TEMPLATES_DIR || !fs.existsSync(LATEX_TEMPLATES_DIR)) return [];
+    return fs.readdirSync(LATEX_TEMPLATES_DIR, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && !entry.name.startsWith('_') && !entry.name.startsWith('.'))
+      .map(entry => {
+        const templateDir = path.join(LATEX_TEMPLATES_DIR, entry.name);
+        const metaPath = path.join(templateDir, 'meta.json');
+        const texPath = path.join(templateDir, 'template.tex.j2');
+        if (!fs.existsSync(metaPath) || !fs.existsSync(texPath)) return null;
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const id = meta.id || entry.name;
+        return {
+          ...meta,
+          id,
+          name: id,
+          displayName: meta.displayName || meta.name || id,
+          path: templateDir,
+          metaPath,
+          templatePath: texPath,
+          kind: 'latex',
+          engineType: 'latex',
+          group: meta.group || 'LaTeX 模板'
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (a.displayName || a.name).localeCompare(b.displayName || b.name, 'zh-Hans-CN'));
+  } catch (e) {
+    console.error('Scan LaTeX templates error:', e);
+    return [];
+  }
+}
+
+function scanTemplates() {
+  return [...scanDocxTemplates(), ...scanLatexTemplates()];
+}
+
+function findTemplateByName(templateName) {
+  return scanTemplates().find(t => t.name === templateName || t.id === templateName || t.path === templateName);
 }
 
 function fillDocx(templatePath, resumeData, outputPath, layoutAdjustments) {
   const tempJson = path.join(app.getPath('temp'), `resume_${Date.now()}.json`);
   fs.writeFileSync(tempJson, JSON.stringify(resumeData, null, 2), 'utf-8');
-  
+
   let tempLayoutJson = null;
   let layoutArg = '';
   if (layoutAdjustments && Object.keys(layoutAdjustments).length > 0) {
@@ -93,7 +156,9 @@ function fillDocx(templatePath, resumeData, outputPath, layoutAdjustments) {
         `python3 "${FILLER_SCRIPT}" "${tempJson}" "${templatePath}" "${outputPath}"`,
         { encoding: 'utf-8', timeout: 30000 }
       );
-      return fs.existsSync(outputPath);
+      const ok = fs.existsSync(outputPath);
+      if (ok) applyPhotoReplacementSync(outputPath, tempJson, resumeData);
+      return ok;
     } catch (err2) {
       console.error('V2 fallback error:', err2.message);
       return false;
@@ -106,14 +171,237 @@ function fillDocx(templatePath, resumeData, outputPath, layoutAdjustments) {
   }
 }
 
+function makeTempPath(prefix, suffix) {
+  return path.join(app.getPath('temp'), `${prefix}_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2)}${suffix}`);
+}
+
+function execFileAsync(file, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { encoding: 'utf-8', timeout: 30000, maxBuffer: 2 * 1024 * 1024, ...options }, (error, stdout, stderr) => {
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+  });
+}
+
+function parseJsonPayload(text) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    return null;
+  }
+}
+
+async function runLatexRenderer(args, options = {}) {
+  const rendererEnv = {
+    ...process.env,
+    LATEX_TEMPLATES_DIR
+  };
+  const runOptions = {
+    timeout: options.timeout || 90000,
+    maxBuffer: options.maxBuffer || 8 * 1024 * 1024,
+    env: rendererEnv
+  };
+
+  try {
+    const { stdout, stderr } = await execFileAsync('python3', [LATEX_RENDERER_SCRIPT, ...args], runOptions);
+    const payload = parseJsonPayload(stdout) || { success: false, error: 'LaTeX renderer stdout is not JSON', stdout };
+    if (stderr) payload.stderr = stderr;
+    return payload;
+  } catch (err) {
+    const payload = parseJsonPayload(err.stdout) || { success: false };
+    return {
+      ...payload,
+      success: false,
+      error: payload.error || err.message || 'LaTeX renderer failed',
+      stderr: payload.stderr || err.stderr || '',
+      stdout: payload.stdout || err.stdout || ''
+    };
+  }
+}
+
+async function getLatexCompilerStatus() {
+  const result = await runLatexRenderer(['status'], { timeout: 15000 });
+  if (result.success === false && !result.compiler) {
+    return {
+      success: false,
+      compiler: { available: false, message: result.error || '无法检测 LaTeX 编译器' },
+      error: result.error || '无法检测 LaTeX 编译器'
+    };
+  }
+  return result;
+}
+
+async function renderLatexTemplate(template, resumeData, { noCompile = false } = {}) {
+  const tempJson = makeTempPath('latex_resume', '.json');
+  const outputDir = makeTempPath(noCompile ? 'latex_tex' : 'latex_pdf', '');
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.writeFileSync(tempJson, JSON.stringify(resumeData, null, 2), 'utf-8');
+
+  try {
+    const args = ['render', tempJson, template.id || template.name, outputDir];
+    if (noCompile) args.push('--no-compile');
+    return await runLatexRenderer(args, { timeout: noCompile ? 45000 : 120000 });
+  } finally {
+    try { fs.unlinkSync(tempJson); } catch (e) {}
+  }
+}
+
+function cleanupLatexOutput(result) {
+  const candidates = [result?.texPath, result?.pdfPath].filter(Boolean).map(file => path.dirname(file));
+  for (const dir of new Set(candidates)) {
+    if (dir && dir.startsWith(app.getPath('temp'))) {
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {}
+    }
+  }
+}
+
+function safeExportStem(value) {
+  return String(value || '我的').replace(/[\\/:*?"<>|]+/g, '_').trim() || '我的';
+}
+
+function shouldApplyPhotoReplacement(resumeData) {
+  return Boolean(resumeData?.basicInfo?.photo && fs.existsSync(PHOTO_SCRIPT));
+}
+
+function applyPhotoReplacementSync(outputPath, tempJsonPath, resumeData) {
+  if (!shouldApplyPhotoReplacement(resumeData) || !fs.existsSync(outputPath)) return;
+  try {
+    execSync(`python3 "${PHOTO_SCRIPT}" "${tempJsonPath}" "${outputPath}"`, { encoding: 'utf-8', timeout: 30000 });
+  } catch (err) {
+    console.error('Photo replacement fallback error:', err.message);
+  }
+}
+
+async function applyPhotoReplacementAsync(outputPath, tempJsonPath, resumeData) {
+  if (!shouldApplyPhotoReplacement(resumeData) || !fs.existsSync(outputPath)) return;
+  try {
+    await execFileAsync('python3', [PHOTO_SCRIPT, tempJsonPath, outputPath], { timeout: 30000 });
+  } catch (err) {
+    console.error('Photo replacement async fallback error:', err.message);
+  }
+}
+
+async function fillDocxAsync(templatePath, resumeData, outputPath, layoutAdjustments) {
+  const tempJson = makeTempPath('resume', '.json');
+  fs.writeFileSync(tempJson, JSON.stringify(resumeData, null, 2), 'utf-8');
+
+  let tempLayoutJson = null;
+  const engineArgs = [ENGINE_SCRIPT, tempJson, templatePath, outputPath];
+  if (layoutAdjustments && Object.keys(layoutAdjustments).length > 0) {
+    tempLayoutJson = makeTempPath('layout', '.json');
+    fs.writeFileSync(tempLayoutJson, JSON.stringify(layoutAdjustments, null, 2), 'utf-8');
+    engineArgs.push(tempLayoutJson);
+  }
+
+  try {
+    await execFileAsync('python3', engineArgs);
+    if (fs.existsSync(outputPath)) return true;
+    console.error('Fill docx async: output file not created');
+    return false;
+  } catch (err) {
+    console.error('Fill docx async error:', err.message);
+    try {
+      await execFileAsync('python3', [FILLER_SCRIPT, tempJson, templatePath, outputPath]);
+      const ok = fs.existsSync(outputPath);
+      if (ok) await applyPhotoReplacementAsync(outputPath, tempJson, resumeData);
+      return ok;
+    } catch (err2) {
+      console.error('V2 async fallback error:', err2.message);
+      return false;
+    }
+  } finally {
+    try { fs.unlinkSync(tempJson); } catch (e) {}
+    if (tempLayoutJson) {
+      try { fs.unlinkSync(tempLayoutJson); } catch (e) {}
+    }
+  }
+}
+
+function findLibreOfficeExecutable() {
+  const candidates = [
+    '/Applications/LibreOffice.app/Contents/MacOS/soffice',
+    '/Applications/OpenOffice.app/Contents/MacOS/soffice',
+    '/opt/homebrew/bin/soffice',
+    '/usr/local/bin/soffice',
+    '/usr/bin/soffice'
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  try {
+    const found = execSync('command -v soffice', { encoding: 'utf-8', timeout: 2000 }).trim();
+    if (found && fs.existsSync(found)) return found;
+  } catch (e) {}
+  return null;
+}
+
+async function renderFileQuickLookPreview(filePath, size = '1600') {
+  if (process.platform !== 'darwin') return null;
+
+  const outDir = makeTempPath('ql_preview', '');
+  fs.mkdirSync(outDir, { recursive: true });
+  try {
+    await execFileAsync('/usr/bin/qlmanage', ['-t', '-s', String(size), '-o', outDir, filePath], { timeout: 25000 });
+    const expected = path.join(outDir, path.basename(filePath) + '.png');
+    let pngPath = fs.existsSync(expected) ? expected : null;
+    if (!pngPath) {
+      const generated = fs.readdirSync(outDir).find(f => f.toLowerCase().endsWith('.png'));
+      if (generated) pngPath = path.join(outDir, generated);
+    }
+    if (!pngPath || !fs.existsSync(pngPath)) return null;
+    const buffer = fs.readFileSync(pngPath);
+    return buffer.toString('base64');
+  } catch (err) {
+    console.error('QuickLook preview error:', err.message);
+    return null;
+  } finally {
+    try { fs.rmSync(outDir, { recursive: true, force: true }); } catch (e) {}
+  }
+}
+
+async function renderDocxLibreOfficePreview(docxPath) {
+  const soffice = findLibreOfficeExecutable();
+  if (!soffice) return null;
+
+  const outDir = makeTempPath('lo_preview', '');
+  fs.mkdirSync(outDir, { recursive: true });
+  try {
+    await execFileAsync(soffice, [
+      '--headless', '--nologo', '--nofirststartwizard',
+      '--convert-to', 'pdf', '--outdir', outDir, docxPath
+    ], { timeout: 60000 });
+    const pdfPath = path.join(outDir, path.basename(docxPath, path.extname(docxPath)) + '.pdf');
+    if (!fs.existsSync(pdfPath)) return null;
+    return await renderFileQuickLookPreview(pdfPath, '1600');
+  } catch (err) {
+    console.error('LibreOffice preview error:', err.message);
+    return null;
+  } finally {
+    try { fs.rmSync(outDir, { recursive: true, force: true }); } catch (e) {}
+  }
+}
+
+async function renderDocxPreviewImage(docxPath) {
+  const quickLook = await renderFileQuickLookPreview(docxPath, '1600');
+  if (quickLook) return quickLook;
+  return await renderDocxLibreOfficePreview(docxPath);
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 920,
     minWidth: 1024,
     minHeight: 700,
-    title: "智能简历生成器 | 真实 Word 模板套用系统",
-    icon: path.join(__dirname, 'public/favicon.svg'),
+    title: "LaTeX 简历工坊 | Word + LaTeX 简历生成器",
+    icon: WINDOW_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -127,7 +415,7 @@ function createWindow() {
 
   const isDev = !app.isPackaged;
   if (isDev) {
-    mainWindow.loadURL('http://localhost:3000');
+    mainWindow.loadURL(`http://localhost:${RESUME_DEV_PORT}`);
   } else {
     mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
   }
@@ -144,8 +432,11 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
   setTimeout(() => {
+    if (!app.isPackaged || process.env.RESUME_ENABLE_AUTO_UPDATE !== '1') return;
     console.log('[AutoUpdate] Checking for updates...');
-    autoUpdater.checkForUpdatesAndNotify();
+    autoUpdater.checkForUpdatesAndNotify().catch(err => {
+      console.error('[AutoUpdate] Check failed:', err.message);
+    });
   }, 3000);
 
   app.on('activate', () => {
@@ -159,7 +450,10 @@ app.on('window-all-closed', () => {
 
 ipcMain.on('check-for-updates', () => {
   console.log('[AutoUpdate] Manual check triggered');
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.checkForUpdatesAndNotify().catch(err => {
+    console.error('[AutoUpdate] Manual check failed:', err.message);
+    if (mainWindow) mainWindow.webContents.send('update-error', err.message);
+  });
 });
 
 autoUpdater.on('update-available', (info) => {
@@ -189,16 +483,25 @@ ipcMain.handle('get-template-list', async () => {
   return scanTemplates();
 });
 
+ipcMain.handle('get-latex-compiler-status', async () => {
+  return getLatexCompilerStatus();
+});
+
 ipcMain.handle('parse-template-layout', async (event, { templatePath }) => {
   try {
+    const template = findTemplateByName(templatePath);
+    if (template?.kind === 'latex' || template?.engineType === 'latex') {
+      return { success: true, engineType: 'latex', fields: [] };
+    }
     const SPATIAL_SCRIPT = app.isPackaged
       ? path.join(process.resourcesPath, 'utils', 'spatial_engine.py')
       : path.join(__dirname, 'src/utils/spatial_engine.py');
-    const result = execSync(
-      `python3 "${SPATIAL_SCRIPT}" --export-layout "${templatePath}"`,
-      { encoding: 'utf-8', timeout: 15000 }
+    const { stdout } = await execFileAsync(
+      'python3',
+      [SPATIAL_SCRIPT, '--export-layout', templatePath],
+      { timeout: 15000 }
     );
-    return JSON.parse(result);
+    return JSON.parse(stdout);
   } catch (err) {
     console.error('Parse template layout error:', err.message);
     return { error: err.message };
@@ -206,13 +509,25 @@ ipcMain.handle('parse-template-layout', async (event, { templatePath }) => {
 });
 
 const SPATIAL_WHITELIST = new Set([
-  "文艺单页04", "文艺单页07", "文艺单页09", "文艺单页16",
+  "文艺单页03", "文艺单页04", "文艺单页07", "文艺单页09", "文艺单页16",
   "活泼单页12", "知页简历02", "知页简历03", "稳重单页01", "稳重单页21",
   "简约单页18", "简约单页19", "简约单页30",
   "文艺单页10", "文艺单页12", "稳重单页06", "稳重单页12", "稳重单页20", "简约单页25"
 ]);
 
 ipcMain.handle('check-template-config', async (event, { templatePath }) => {
+  const template = findTemplateByName(templatePath);
+  if (template?.kind === 'latex' || template?.engineType === 'latex') {
+    return {
+      hasConfig: true,
+      fallback: false,
+      engineType: 'latex',
+      kind: 'latex',
+      tags: template.tags || [],
+      recommendedCompiler: template.recommendedCompiler || 'xelatex'
+    };
+  }
+
   let docxtplPath = templatePath.replace('.docx', '.docxtpl.docx');
   let hasDocxtpl = fs.existsSync(docxtplPath);
   
@@ -292,19 +607,58 @@ ipcMain.handle('save-api-config', async (event, apiCfg) => {
 });
 
 ipcMain.handle('render-preview', async (event, { templateName, resumeData, layoutAdjustments }) => {
-  const template = scanTemplates().find(t => t.name === templateName);
+  const template = findTemplateByName(templateName);
   if (!template) return { success: false, error: '模板未找到' };
+
+  if (template.kind === 'latex' || template.engineType === 'latex') {
+    let result = null;
+    try {
+      result = await renderLatexTemplate(template, resumeData, { noCompile: false });
+      if (!result.success) {
+        return { success: false, engineType: 'latex', error: result.error || 'LaTeX 渲染失败' };
+      }
+      if (result.missingCompiler || !result.compiled || !result.pdfPath || !fs.existsSync(result.pdfPath)) {
+        return {
+          success: true,
+          engineType: 'latex',
+          texPath: result.texPath,
+          compiled: false,
+          missingCompiler: Boolean(result.missingCompiler || !result.compiler?.available),
+          compiler: result.compiler,
+          message: result.compiler?.message || '未检测到 LaTeX 编译器；当前可导出 .tex。'
+        };
+      }
+      const previewImageBase64 = await renderFileQuickLookPreview(result.pdfPath, '1600');
+      return {
+        success: true,
+        engineType: 'latex',
+        texPath: result.texPath,
+        pdfPath: result.pdfPath,
+        compiled: true,
+        compiler: result.compiler,
+        previewImageBase64
+      };
+    } catch (err) {
+      return { success: false, engineType: 'latex', error: 'LaTeX 预览失败: ' + err.message };
+    } finally {
+      if (result && process.env.RESUME_DEBUG_PREVIEW !== '1') cleanupLatexOutput(result);
+    }
+  }
 
   const tempDir = app.getPath('temp');
   const tempDocx = path.join(tempDir, `preview_${Date.now()}.docx`);
 
-  const filled = fillDocx(template.path, resumeData, tempDocx, layoutAdjustments);
+  const filled = await fillDocxAsync(template.path, resumeData, tempDocx, layoutAdjustments);
   if (!filled) return { success: false, error: '模板填充失败' };
 
   try {
+    if (process.env.RESUME_DEBUG_PREVIEW === '1') {
+      fs.copyFileSync(tempDocx, path.join(app.getPath('temp'), 'last_preview.docx'));
+    }
+    const previewImageBase64 = await renderDocxPreviewImage(tempDocx);
     const buffer = fs.readFileSync(tempDocx);
     try { fs.unlinkSync(tempDocx); } catch (e) {}
-    return { success: true, docxBase64: buffer.toString('base64') };
+    return { success: true, engineType: template.engineType || 'docx', docxBase64: buffer.toString('base64'), previewImageBase64 };
   } catch (err) {
     try { fs.unlinkSync(tempDocx); } catch (e) {}
     return { success: false, error: '读取预览 Word 失败: ' + err.message };
@@ -314,9 +668,13 @@ ipcMain.handle('render-preview', async (event, { templateName, resumeData, layou
 ipcMain.on('export-to-word', async (event, { templateName, resumeData, layoutAdjustments }) => {
   if (!mainWindow) return;
 
-  const template = scanTemplates().find(t => t.name === templateName);
+  const template = findTemplateByName(templateName);
   if (!template) {
     event.reply('word-failed', '模板未找到');
+    return;
+  }
+  if (template.kind === 'latex' || template.engineType === 'latex') {
+    event.reply('word-failed', 'LaTeX 模板不支持 Word 导出，请使用“导出 .tex”或“编译 PDF”。');
     return;
   }
 
@@ -353,19 +711,106 @@ ipcMain.on('export-to-word', async (event, { templateName, resumeData, layoutAdj
       const tempJson2 = path.join(app.getPath('temp'), `export2_${Date.now()}.json`);
       fs.writeFileSync(tempJson2, JSON.stringify(resumeData, null, 2), 'utf-8');
       exec(`python3 "${FILLER_SCRIPT}" "${tempJson2}" "${template.path}" "${filePath}"`, { encoding: 'utf-8', timeout: 30000 }, (err2) => {
-        try { fs.unlinkSync(tempJson2); } catch (e) {}
+        const finishFallback = () => {
+          try { fs.unlinkSync(tempJson2); } catch (e) {}
+          event.reply('word-saved', `已导出: ${path.basename(filePath)}`);
+        };
         if (err2) {
+          try { fs.unlinkSync(tempJson2); } catch (e) {}
           console.error('Export error:', err2.message);
           event.reply('word-failed', 'Word 导出失败');
           return;
         }
-        event.reply('word-saved', `已导出: ${path.basename(filePath)}`);
+        if (shouldApplyPhotoReplacement(resumeData)) {
+          exec(`python3 "${PHOTO_SCRIPT}" "${tempJson2}" "${filePath}"`, { encoding: 'utf-8', timeout: 30000 }, (photoErr) => {
+            if (photoErr) console.error('Export photo replacement fallback error:', photoErr.message);
+            finishFallback();
+          });
+        } else {
+          finishFallback();
+        }
       });
       return;
     }
     console.log('Export:', stdout);
     event.reply('word-saved', `已导出: ${path.basename(filePath)}`);
   });
+});
+
+ipcMain.on('export-latex-tex', async (event, { templateName, resumeData }) => {
+  if (!mainWindow) return;
+  const template = findTemplateByName(templateName);
+  if (!template || template.kind !== 'latex') {
+    event.reply('latex-tex-failed', 'LaTeX 模板未找到');
+    return;
+  }
+
+  const baseName = safeExportStem(resumeData?.basicInfo?.name || '我的') + '_' + safeExportStem(template.displayName || template.name);
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: '导出 LaTeX 源文件',
+    defaultPath: path.join(app.getPath('downloads'), `${baseName}.tex`),
+    filters: [{ name: 'LaTeX 源文件 (*.tex)', extensions: ['tex'] }]
+  });
+  if (canceled || !filePath) {
+    event.reply('latex-tex-failed', '导出已取消');
+    return;
+  }
+
+  let result = null;
+  try {
+    result = await renderLatexTemplate(template, resumeData, { noCompile: true });
+    if (!result.success || !result.texPath || !fs.existsSync(result.texPath)) {
+      event.reply('latex-tex-failed', result.error || 'LaTeX 源文件生成失败');
+      return;
+    }
+    fs.copyFileSync(result.texPath, filePath);
+    event.reply('latex-tex-saved', `LaTeX 源文件已导出: ${path.basename(filePath)}`);
+  } catch (err) {
+    event.reply('latex-tex-failed', 'LaTeX 源文件导出失败: ' + err.message);
+  } finally {
+    if (result) cleanupLatexOutput(result);
+  }
+});
+
+ipcMain.on('export-latex-pdf', async (event, { templateName, resumeData }) => {
+  if (!mainWindow) return;
+  const template = findTemplateByName(templateName);
+  if (!template || template.kind !== 'latex') {
+    event.reply('latex-pdf-failed', 'LaTeX 模板未找到');
+    return;
+  }
+
+  const compilerStatus = await getLatexCompilerStatus();
+  if (!compilerStatus.compiler?.available) {
+    event.reply('latex-pdf-failed', compilerStatus.compiler?.message || '未检测到 LaTeX 编译器；请先导出 .tex，或安装 Tectonic/MacTeX 后再编译 PDF。');
+    return;
+  }
+
+  const baseName = safeExportStem(resumeData?.basicInfo?.name || '我的') + '_' + safeExportStem(template.displayName || template.name);
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: '编译并导出 LaTeX PDF',
+    defaultPath: path.join(app.getPath('downloads'), `${baseName}.pdf`),
+    filters: [{ name: 'PDF 文档 (*.pdf)', extensions: ['pdf'] }]
+  });
+  if (canceled || !filePath) {
+    event.reply('latex-pdf-failed', '导出已取消');
+    return;
+  }
+
+  let result = null;
+  try {
+    result = await renderLatexTemplate(template, resumeData, { noCompile: false });
+    if (!result.success || !result.compiled || !result.pdfPath || !fs.existsSync(result.pdfPath)) {
+      event.reply('latex-pdf-failed', result.error || result.compileError || result.compiler?.message || 'LaTeX PDF 编译失败');
+      return;
+    }
+    fs.copyFileSync(result.pdfPath, filePath);
+    event.reply('latex-pdf-saved', `LaTeX PDF 已导出: ${path.basename(filePath)}`);
+  } catch (err) {
+    event.reply('latex-pdf-failed', 'LaTeX PDF 导出失败: ' + err.message);
+  } finally {
+    if (result) cleanupLatexOutput(result);
+  }
 });
 
 ipcMain.on('print-to-pdf', async (event, { defaultFileName, htmlContent }) => {

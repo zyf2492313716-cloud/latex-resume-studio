@@ -1,5 +1,5 @@
 {
-  "name": "resume-generator",
+  "name": "latex-resume-studio",
   "private": true,
   "version": "3.0.0",
   "type": "module",
@@ -28,8 +28,8 @@
     "react-dom": "^19.0.0"
   },
   "build": {
-    "appId": "com.antigravity.resume-generator",
-    "productName": "智能简历生成器",
+    "appId": "com.zyf.latex-resume-studio",
+    "productName": "LaTeX 简历工坊",
     "directories": {
       "output": "dist-desktop"
     },
@@ -43,14 +43,14 @@
       "publish": {
         "provider": "github",
         "owner": "zyf2492313716-cloud",
-        "repo": "resume-generator",
+        "repo": "latex-resume-studio",
         "releaseType": "release"
       }
     },
     "dmg": {
       "iconSize": 120,
       "iconTextSize": 14,
-      "title": "智能简历生成器安装盘",
+      "title": "LaTeX 简历工坊安装盘",
       "contents": [
         {
           "x": 140,
@@ -83,6 +83,10 @@
       {
         "from": "templates",
         "to": "templates"
+      },
+      {
+        "from": "latex_templates",
+        "to": "latex_templates"
       }
     ],
     "asar": false
