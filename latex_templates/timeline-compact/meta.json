@@ -1,0 +1,13 @@
+{
+  "id": "timeline-compact",
+  "name": "timeline-compact",
+  "displayName": "Timeline Compact 紧凑时间线 LaTeX",
+  "group": "LaTeX 模板",
+  "engineType": "latex",
+  "kind": "latex",
+  "tags": ["紧凑", "时间线", "ATS友好", "照片", "中文友好", "需编译器"],
+  "recommendedCompiler": "xelatex",
+  "license": "Original implementation; style inspired by entry-level and timeline resume layouts",
+  "source": "https://www.overleaf.com/latex/templates/entry-level-resume-template-latex/jsmpwkcwyntg",
+  "inspiredBy": "Entry-level timeline resume layouts"
+}

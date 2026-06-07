@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onWordFailed: (callback) => { const h = (e, ...a) => callback(...a); ipcRenderer.on('word-failed', h); return () => ipcRenderer.removeListener('word-failed', h); },
 
   getLatexCompilerStatus: () => ipcRenderer.invoke('get-latex-compiler-status'),
+  renderLatexSourcePreview: (source, name, resumeData) => ipcRenderer.invoke('render-latex-source-preview', { source, name, resumeData }),
   exportLatexTex: (templateName, resumeData) => ipcRenderer.send('export-latex-tex', { templateName, resumeData }),
   onLatexTexSaved: (callback) => { const h = (e, ...a) => callback(...a); ipcRenderer.on('latex-tex-saved', h); return () => ipcRenderer.removeListener('latex-tex-saved', h); },
   onLatexTexFailed: (callback) => { const h = (e, ...a) => callback(...a); ipcRenderer.on('latex-tex-failed', h); return () => ipcRenderer.removeListener('latex-tex-failed', h); },

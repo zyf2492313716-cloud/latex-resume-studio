@@ -4,6 +4,7 @@
 \usepackage{xcolor}
 \usepackage{tabularx}
 \usepackage{array}
+\usepackage{graphicx}
 \usepackage[hidelinks]{hyperref}
 \usepackage{ragged2e}
 \usepackage{titlesec}
@@ -51,4 +52,7 @@
 
 \newcommand{\rgSkillLine}[1]{\small #1\par\vspace{0.12em}}
 \newcommand{\rgMuted}[1]{{\color{gray}#1}}
+\newcommand{\rgPhotoPlaceholder}[3]{%
+  \fcolorbox{#1}{#2}{\parbox[c][2.8cm][c]{2.45cm}{\centering\small\bfseries #3}}%
+}
 {% endraw %}

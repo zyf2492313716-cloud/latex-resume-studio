@@ -9,6 +9,8 @@ compiler is installed, it also compiles the file to PDF.
 from __future__ import annotations
 
 import argparse
+import base64
+import io
 import json
 import os
 import re
@@ -183,8 +185,49 @@ def normalize_basic(raw: Dict[str, Any]) -> Dict[str, Any]:
         "wechat": tex_escape(wechat),
         "github": tex_escape(github),
         "summary": tex_escape(clean_text(basic.get("summary"))),
+        "photoPath": clean_text(basic.get("photoPath")),
+        "hasPhoto": bool(clean_text(basic.get("photoPath"))),
         "contacts": contacts,
     }
+
+
+def write_photo_file(raw: Dict[str, Any], output_dir: Path) -> Optional[str]:
+    photo = clean_text((raw.get("basicInfo") or {}).get("photo"))
+    if not photo.startswith("data:image/") or ";base64," not in photo:
+        return None
+
+    header, encoded = photo.split(",", 1)
+    match = re.match(r"data:image/([A-Za-z0-9.+-]+);base64", header)
+    if not match:
+        return None
+    ext = match.group(1).lower().replace("jpeg", "jpg")
+    if ext not in {"png", "jpg", "webp"}:
+        ext = "png"
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except Exception:
+        return None
+    if not payload:
+        return None
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        from PIL import Image  # type: ignore
+
+        with Image.open(io.BytesIO(payload)) as image:
+            if image.mode not in {"RGB", "L"}:
+                image = image.convert("RGB")
+            elif image.mode == "L":
+                image = image.convert("RGB")
+            photo_path = output_dir / "resume_photo.jpg"
+            image.save(photo_path, format="JPEG", quality=92, optimize=True)
+            return str(photo_path)
+    except Exception:
+        pass
+
+    photo_path = output_dir / f"resume_photo.{ext}"
+    photo_path.write_bytes(payload)
+    return str(photo_path)
 
 
 def normalize_entry(item: Dict[str, Any], fields: Iterable[str]) -> Dict[str, Any]:
@@ -195,7 +238,15 @@ def normalize_entry(item: Dict[str, Any], fields: Iterable[str]) -> Dict[str, An
     return normalized
 
 
-def normalize_context(raw: Dict[str, Any], meta: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_context(raw: Dict[str, Any], meta: Dict[str, Any], output_dir: Optional[Path] = None) -> Dict[str, Any]:
+    normalized_raw = dict(raw)
+    basic_raw = dict(raw.get("basicInfo") or {})
+    if output_dir:
+        photo_path = write_photo_file(raw, output_dir)
+        if photo_path:
+            basic_raw["photoPath"] = photo_path
+    normalized_raw["basicInfo"] = basic_raw
+
     education = [normalize_entry(item, ("school", "major", "degree")) for item in safe_list(raw.get("education")) if isinstance(item, dict)]
     experience = [normalize_entry(item, ("company", "role")) for item in safe_list(raw.get("experience")) if isinstance(item, dict)]
     projects = [normalize_entry(item, ("name", "role")) for item in safe_list(raw.get("projects")) if isinstance(item, dict)]
@@ -215,7 +266,7 @@ def normalize_context(raw: Dict[str, Any], meta: Dict[str, Any]) -> Dict[str, An
     }
     return {
         "meta": meta,
-        "basic": normalize_basic(raw),
+        "basic": normalize_basic(normalized_raw),
         "education": education,
         "experience": experience,
         "projects": projects,
@@ -248,7 +299,8 @@ def render_tex(data_path: Path, template_id: str, output_dir: Path, templates_di
     with data_path.open("r", encoding="utf-8") as f:
         raw_data = json.load(f)
 
-    context = normalize_context(raw_data, meta)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    context = normalize_context(raw_data, meta, output_dir)
     env = Environment(
         loader=FileSystemLoader(str(templates_dir)),
         undefined=StrictUndefined,
@@ -263,7 +315,6 @@ def render_tex(data_path: Path, template_id: str, output_dir: Path, templates_di
     except TemplateNotFound as exc:
         raise FileNotFoundError(f"Jinja2 模板未找到: {exc}") from exc
 
-    output_dir.mkdir(parents=True, exist_ok=True)
     raw_name = clean_text((raw_data.get("basicInfo") or {}).get("name")) or "resume"
     file_stem = sanitize_filename(f"{raw_name}_{template_id}")
     tex_path = output_dir / f"{file_stem}.tex"
@@ -272,6 +323,40 @@ def render_tex(data_path: Path, template_id: str, output_dir: Path, templates_di
     return {
         "success": True,
         "template": meta,
+        "texPath": str(tex_path),
+        "pdfPath": None,
+        "compiled": False,
+    }
+
+
+def rewrite_source_photo(source: str, data_path: Optional[Path], output_dir: Path) -> str:
+    if not data_path:
+        return source
+    try:
+        with data_path.open("r", encoding="utf-8") as f:
+            raw_data = json.load(f)
+        photo_path = write_photo_file(raw_data, output_dir)
+    except Exception:
+        photo_path = None
+    if not photo_path:
+        return source
+    safe_photo_path = photo_path.replace("\\", "/")
+    return re.sub(
+        r"\\includegraphics(\[[^\]]*\])?\{[^{}]*resume_photo\.(?:png|jpg|jpeg|webp)\}",
+        lambda match: f"\\includegraphics{match.group(1) or ''}{{{safe_photo_path}}}",
+        source,
+    )
+
+
+def render_source_tex(source_path: Path, output_dir: Path, name: str = "edited-latex-preview", data_path: Optional[Path] = None) -> Dict[str, Any]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    file_stem = sanitize_filename(name)
+    tex_path = output_dir / f"{file_stem}.tex"
+    source = source_path.read_text(encoding="utf-8")
+    tex_path.write_text(rewrite_source_photo(source, data_path, output_dir), encoding="utf-8")
+    return {
+        "success": True,
+        "template": {"id": "manual-source", "displayName": "Manual LaTeX Source"},
         "texPath": str(tex_path),
         "pdfPath": None,
         "compiled": False,
@@ -366,6 +451,24 @@ def command_render(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_render_source(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir).expanduser().resolve()
+    data_path = Path(args.data_json).expanduser().resolve() if args.data_json else None
+    result = render_source_tex(Path(args.source_tex).expanduser().resolve(), output_dir, args.name, data_path)
+    compiler = detect_compiler(args.compiler)
+    result["compiler"] = compiler
+
+    if not compiler.get("available"):
+        result["missingCompiler"] = True
+        print_json(result)
+        return 0
+
+    compile_result = compile_pdf(Path(result["texPath"]), compiler)
+    result.update(compile_result)
+    print_json(result)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Render resume JSON with LaTeX Jinja2 templates")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -386,6 +489,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_render.add_argument("--compiler", default=None)
     p_render.add_argument("--no-compile", action="store_true")
     p_render.set_defaults(func=command_render)
+
+    p_render_source = subparsers.add_parser("render-source", help="Compile a manually edited .tex source file")
+    p_render_source.add_argument("source_tex")
+    p_render_source.add_argument("output_dir")
+    p_render_source.add_argument("--name", default="edited-latex-preview")
+    p_render_source.add_argument("--data-json", default=None)
+    p_render_source.add_argument("--compiler", default=None)
+    p_render_source.set_defaults(func=command_render_source)
     return parser
 
 

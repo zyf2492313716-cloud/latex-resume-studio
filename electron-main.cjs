@@ -253,6 +253,24 @@ async function renderLatexTemplate(template, resumeData, { noCompile = false } =
   }
 }
 
+async function renderLatexSource(source, { name = 'edited-latex-preview', resumeData = null } = {}) {
+  const sourcePath = makeTempPath('latex_source_edit', '.tex');
+  const outputDir = makeTempPath('latex_source_pdf', '');
+  const dataPath = resumeData ? makeTempPath('latex_source_data', '.json') : null;
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.writeFileSync(sourcePath, String(source || ''), 'utf-8');
+  if (dataPath) fs.writeFileSync(dataPath, JSON.stringify(resumeData), 'utf-8');
+
+  try {
+    const args = ['render-source', sourcePath, outputDir, '--name', name];
+    if (dataPath) args.push('--data-json', dataPath);
+    return await runLatexRenderer(args, { timeout: 120000 });
+  } finally {
+    try { fs.unlinkSync(sourcePath); } catch (e) {}
+    if (dataPath) { try { fs.unlinkSync(dataPath); } catch (e) {} }
+  }
+}
+
 function cleanupLatexOutput(result) {
   const candidates = [result?.texPath, result?.pdfPath].filter(Boolean).map(file => path.dirname(file));
   for (const dir of new Set(candidates)) {
@@ -660,7 +678,7 @@ ipcMain.handle('render-preview', async (event, { templateName, resumeData, layou
         engineType: 'latex',
         texPath: result.texPath,
         pdfPath: result.pdfPath,
-        texSource: previewImageBase64 ? '' : texSource,
+        texSource,
         compiled: true,
         compiler: result.compiler,
         previewImageBase64,
@@ -690,6 +708,55 @@ ipcMain.handle('render-preview', async (event, { templateName, resumeData, layou
   } catch (err) {
     try { fs.unlinkSync(tempDocx); } catch (e) {}
     return { success: false, error: '读取预览 Word 失败: ' + err.message };
+  }
+});
+
+ipcMain.handle('render-latex-source-preview', async (event, { source, name, resumeData }) => {
+  if (!source || !String(source).trim()) {
+    return { success: false, engineType: 'latex', error: 'LaTeX 源码为空' };
+  }
+
+  let result = null;
+  try {
+    result = await renderLatexSource(source, { name: name || 'edited-latex-preview', resumeData });
+    const texSource = readLatexTexSource(result);
+    if (!result.success) {
+      return {
+        success: false,
+        engineType: 'latex',
+        error: result.error || result.compileError || '手动 LaTeX 源码编译失败',
+        texSource: texSource || String(source),
+        message: result.stderr || result.stdout || result.error || ''
+      };
+    }
+    if (result.missingCompiler || !result.compiled || !result.pdfPath || !fs.existsSync(result.pdfPath)) {
+      return {
+        success: false,
+        engineType: 'latex',
+        texSource: texSource || String(source),
+        compiled: false,
+        missingCompiler: Boolean(result.missingCompiler || !result.compiler?.available),
+        compiler: result.compiler,
+        error: result.compileError || result.compiler?.message || 'LaTeX 源码未能编译出 PDF',
+        message: result.stdout || result.stderr || ''
+      };
+    }
+    const previewImageBase64 = await renderFileQuickLookPreview(result.pdfPath, '1600');
+    return {
+      success: Boolean(previewImageBase64),
+      engineType: 'latex',
+      texSource: texSource || String(source),
+      compiled: true,
+      compiler: result.compiler,
+      previewImageBase64,
+      pdfPath: result.pdfPath,
+      error: previewImageBase64 ? '' : 'PDF 已生成，但系统图片预览转换失败',
+      message: previewImageBase64 ? '已根据手动修改重新生成 LaTeX 预览。' : 'PDF 已生成，但系统图片预览转换失败。'
+    };
+  } catch (err) {
+    return { success: false, engineType: 'latex', error: '手动 LaTeX 源码预览失败: ' + err.message, texSource: String(source) };
+  } finally {
+    if (result && process.env.RESUME_DEBUG_PREVIEW !== '1') cleanupLatexOutput(result);
   }
 });
 

@@ -1,0 +1,47 @@
+\documentclass[10pt,a4paper]{ctexart}
+{% include "_partials/common_macros.tex.j2" %}
+\geometry{left=1.35cm,right=1.35cm,top=1.2cm,bottom=1.2cm}
+\definecolor{accent}{HTML}{2563EB}
+\definecolor{violet}{HTML}{8B5CF6}
+\definecolor{soft}{HTML}{EEF2FF}
+\definecolor{ink}{HTML}{0F172A}
+\definecolor{muted}{HTML}{475569}
+\renewcommand{\rgSection}[1]{\vspace{0.5em}{\Large\bfseries\color{ink}#1}\hspace{0.45em}{\color{violet}\rule[0.55ex]{0.18\linewidth}{1.2pt}}\par\vspace{0.25em}}
+
+\begin{document}
+\colorbox{soft}{\parbox{0.985\linewidth}{\vspace{0.55em}
+\begin{tabularx}{\linewidth}{@{}X r@{}}
+{\Huge\bfseries\color{ink}{{ basic.name }}} & {% if basic.hasPhoto %}\includegraphics[width=2.35cm,height=2.75cm,keepaspectratio]{ {{- basic.photoPath -}} }{% else %}\rgPhotoPlaceholder{violet}{white}{ {{ basic.name }} }{% endif %}\\
+{% if basic.title %}{\Large\color{violet}{{ basic.title }}}{% endif %} & \\
+\end{tabularx}
+\vspace{-0.3em}{\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.8em}/\hspace{0.8em}{% endif %}{{ contact.value }}{% endfor %}}\par
+{% if basic.summary %}\vspace{0.45em}{\small\justifying {{ basic.summary }}}\par{% endif %}
+\vspace{0.55em}}}\par
+
+{% if experience or projects %}\rgSection{实践与项目}
+{% for e in experience %}\rgEntry{ {{ e.company }} }{ {{ e.date }} }{ \textcolor{accent}{ {{ e.role }} } }{}
+{% if e.bullets %}\begin{rgBullets}{% for bullet in e.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}
+{% for p in projects %}\rgEntry{ {{ p.name }} }{ {{ p.date }} }{ \textcolor{accent}{ {{ p.role }} } }{}
+{% if p.bullets %}\begin{rgBullets}{% for bullet in p.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+{% if research %}\rgSection{科研亮点}{% for r in research %}\rgEntry{ {{ r.name }} }{ {{ r.date }} }{ {{ r.role }} }{}
+{% if r.bullets %}\begin{rgBullets}{% for bullet in r.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+{% if education or studentWork %}
+\begin{minipage}[t]{0.49\linewidth}
+{% if education %}\rgSection{教育}{% for e in education %}\rgSimpleEntry{ {{ e.school }} }{ {{ e.date }} }{\small {{ e.degree }} {{ e.major }}}\par
+{% if e.bullets %}\begin{rgBullets}{% for bullet in e.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.49\linewidth}
+{% if studentWork %}\rgSection{组织}{% for s in studentWork %}\rgSimpleEntry{ {{ s.organization }} }{ {{ s.date }} }{\small {{ s.role }}}\par
+{% if s.bullets %}\begin{rgBullets}{% for bullet in s.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+\end{minipage}
+{% endif %}
+{% if skills or honors %}\rgSection{能力与荣誉}
+{% if skills %}{% for skill in skills %}\fcolorbox{violet}{soft}{\small {{ skill }}}\hspace{0.3em}{% endfor %}\par{% endif %}
+{% if honors %}\vspace{0.25em}\begin{rgBullets}{% for item in honors %}\item {{ item }}
+{% endfor %}\end{rgBullets}{% endif %}{% endif %}
+\end{document}

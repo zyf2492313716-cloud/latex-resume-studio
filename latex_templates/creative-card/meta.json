@@ -1,0 +1,13 @@
+{
+  "id": "creative-card",
+  "name": "creative-card",
+  "displayName": "Creative Card 创意名片 LaTeX",
+  "group": "LaTeX 模板",
+  "engineType": "latex",
+  "kind": "latex",
+  "tags": ["创意", "照片", "名片式", "作品集", "中文友好", "需编译器"],
+  "recommendedCompiler": "xelatex",
+  "license": "Original implementation; style inspired by Hipster/sidebar resume layouts",
+  "source": "https://www.overleaf.com/latex/templates/simple-hipster-cv/cnpkkjdkyhhw",
+  "inspiredBy": "Simple Hipster CV / card-style profile layouts"
+}

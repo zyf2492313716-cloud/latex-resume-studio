@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -20,6 +21,10 @@ from typing import Any, Dict, List
 ROOT = Path(__file__).resolve().parents[1]
 RENDERER = ROOT / "src" / "utils" / "latex_renderer.py"
 FIXTURE = ROOT / "fixtures" / "sample_resume.zh.json"
+JINJA_TOKEN_RE = re.compile(
+    r"\{%-?\s*(if|for|endif|endfor|include|else|elif)\b"
+    r"|\{\{\s*-?\s*(basic|education|experience|projects|research|studentWork|skills|honors|sections|meta|loop|contact|bullet|item|e|p|r|s)\b"
+)
 
 
 def run_json(cmd: List[str]) -> Dict[str, Any]:
@@ -46,7 +51,7 @@ def validate_template(template_id: str, output_dir: Path) -> Dict[str, Any]:
     if tex_path and tex_path.exists():
         content = tex_path.read_text(encoding="utf-8")
         checks["hasDocumentClass"] = "\\documentclass" in content
-        checks["hasNoJinjaMarkers"] = "{%" not in content and "%}" not in content and "{{ " not in content and " }}" not in content
+        checks["hasNoJinjaMarkers"] = not JINJA_TOKEN_RE.search(content)
     ok = bool(result.get("success")) and result.get("returncode") == 0 and all(checks.values())
     return {"templateId": template_id, "ok": ok, "checks": checks, "result": result}
 

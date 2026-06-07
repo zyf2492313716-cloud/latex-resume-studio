@@ -1,0 +1,13 @@
+{
+  "id": "altacv-sidebar",
+  "name": "altacv-sidebar",
+  "displayName": "Alta Sidebar 照片侧栏 LaTeX",
+  "group": "LaTeX 模板",
+  "engineType": "latex",
+  "kind": "latex",
+  "tags": ["照片", "侧栏", "视觉优先", "中文友好", "完整板块", "需编译器"],
+  "recommendedCompiler": "xelatex",
+  "license": "Original lightweight implementation; style inspired by AltaCV sidebar layouts",
+  "source": "https://www.overleaf.com/latex/templates/altacv-template/trgqjpwnmtgv",
+  "inspiredBy": "AltaCV / sidebar CV visual language"
+}

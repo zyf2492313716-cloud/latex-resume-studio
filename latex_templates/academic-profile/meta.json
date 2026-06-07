@@ -1,0 +1,13 @@
+{
+  "id": "academic-profile",
+  "name": "academic-profile",
+  "displayName": "Academic Profile 学术档案 LaTeX",
+  "group": "LaTeX 模板",
+  "engineType": "latex",
+  "kind": "latex",
+  "tags": ["学术", "科研", "照片", "多板块", "中文友好", "需编译器"],
+  "recommendedCompiler": "xelatex",
+  "license": "Original implementation; style inspired by academic CV and moderncv conventions",
+  "source": "https://www.overleaf.com/latex/templates/tagged/cv",
+  "inspiredBy": "Academic CV / ModernCV profile layouts"
+}

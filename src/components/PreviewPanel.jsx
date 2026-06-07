@@ -10,7 +10,13 @@ export default function PreviewPanel({
   previewImageBase64,
   previewTexSource,
   previewMessage,
+  setPreviewMessage,
+  setPreviewImageBase64,
+  setPreviewTexSource,
+  manualLatexPreview,
+  setManualLatexPreview,
   previewLoading,
+  setPreviewLoading,
   onNotification,
   selectedTemplate,
   resumeData,
@@ -38,6 +44,9 @@ export default function PreviewPanel({
   const isLatex = engineType === 'latex' || selectedTemplate?.kind === 'latex' || selectedTemplate?.engineType === 'latex';
   const isSpatial = engineType === 'spatial';
   const [latexCompilerStatus, setLatexCompilerStatus] = useState(null);
+  const [showLatexEditor, setShowLatexEditor] = useState(false);
+  const [latexDraftSource, setLatexDraftSource] = useState('');
+  const [latexEditCompiling, setLatexEditCompiling] = useState(false);
 
   // Automatically trigger backend re-rendering when adjustments change in spatial mode
   useEffect(() => {
@@ -112,6 +121,10 @@ export default function PreviewPanel({
 
     return () => { cancelled = true; };
   }, [isLatex, selectedTemplate?.name]);
+
+  useEffect(() => {
+    if (!manualLatexPreview) setLatexDraftSource(previewTexSource || '');
+  }, [previewTexSource, manualLatexPreview]);
 
   // 1:1 High fidelity render of docx in preview container via docx-preview
   useEffect(() => {
@@ -403,6 +416,50 @@ export default function PreviewPanel({
     window.electronAPI.exportLatexTex(selectedTemplate.name, dataToExport);
   };
 
+  const handleApplyLatexSourcePreview = async () => {
+    if (!isLatex || !window.electronAPI?.renderLatexSourcePreview) {
+      onNotification({ type: 'warning', message: '当前环境不支持 LaTeX 源码重编译预览' });
+      return;
+    }
+    if (!latexDraftSource.trim()) {
+      onNotification({ type: 'warning', message: 'LaTeX 源码为空，无法预览' });
+      return;
+    }
+
+    setManualLatexPreview(true);
+    setLatexEditCompiling(true);
+    setPreviewLoading(true);
+    setPreviewMessage('正在根据手动修改重新编译 LaTeX 预览...');
+    try {
+      const result = await window.electronAPI.renderLatexSourcePreview(
+        latexDraftSource,
+        `${resumeData?.basicInfo?.name || 'resume'}_${selectedTemplate?.name || 'latex'}_edited`,
+        isDesensitized ? getDesensitizedData(resumeData) : resumeData
+      );
+      setPreviewTexSource(result.texSource || latexDraftSource);
+      if (result.success && result.previewImageBase64) {
+        setPreviewImageBase64(result.previewImageBase64);
+        setPreviewMessage(result.message || '已根据手动修改重新生成 LaTeX 预览。');
+        onNotification({ type: 'success', message: 'LaTeX 源码修改已重新编译为预览' });
+      } else {
+        setPreviewMessage(result.error || result.message || 'LaTeX 源码编译失败，请检查语法。');
+        onNotification({ type: 'warning', message: result.error || 'LaTeX 源码编译失败，请检查语法。' });
+      }
+    } catch (err) {
+      setPreviewMessage(err.message || 'LaTeX 源码预览失败');
+      onNotification({ type: 'warning', message: `LaTeX 源码预览失败: ${err.message}` });
+    } finally {
+      setLatexEditCompiling(false);
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleRestoreAutoLatexPreview = () => {
+    setManualLatexPreview(false);
+    setPreviewMessage('已恢复按表单内容自动生成 LaTeX 预览。');
+    onNotification({ type: 'info', message: '已恢复 LaTeX 自动预览' });
+  };
+
   const handleApplySnapshot = (snappedData, snappedLayout) => {
     setResumeData(snappedData);
     setLayoutAdjustments(snappedLayout);
@@ -421,14 +478,24 @@ export default function PreviewPanel({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {isLatex ? (
-            <button onClick={handleExportLatexTex} style={{
-              padding: '8px 14px', background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
-              color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-              fontSize: '12px', boxShadow: '0 4px 12px rgba(139,92,246,0.25)'
-            }}>
-              <FileText size={14} /> 导出 .tex
-            </button>
+            <>
+              <button onClick={handleExportLatexTex} style={{
+                padding: '8px 14px', background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+                color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                fontSize: '12px', boxShadow: '0 4px 12px rgba(139,92,246,0.25)'
+              }}>
+                <FileText size={14} /> 导出 .tex
+              </button>
+              <button onClick={() => setShowLatexEditor(!showLatexEditor)} style={{
+                padding: '8px 14px', background: showLatexEditor ? 'rgba(20,184,166,0.18)' : 'rgba(255,255,255,0.06)',
+                color: showLatexEditor ? '#5eead4' : '#d1d5db', border: `1px solid ${showLatexEditor ? 'rgba(20,184,166,0.35)' : 'rgba(255,255,255,0.12)'}`,
+                borderRadius: '6px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                fontSize: '12px'
+              }}>
+                <FileText size={14} /> 编辑 LaTeX
+              </button>
+            </>
           ) : (
             <button onClick={handleExportWord} style={{
               padding: '8px 14px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
@@ -510,6 +577,59 @@ export default function PreviewPanel({
           {latexCompilerStatus?.compiler?.available
             ? `已检测到 ${latexCompilerStatus.compiler.name}，可编译 PDF；也可导出 .tex 到 Overleaf/本地继续调整。`
             : (latexCompilerStatus?.compiler?.message || '正在检测 LaTeX 编译器；即使没有编译器，也可以先导出 .tex。')}
+        </div>
+      )}
+
+      {isLatex && showLatexEditor && (
+        <div className="print-hide" style={{
+          width: '100%', maxWidth: '850px', marginTop: '10px',
+          background: 'rgba(15,23,42,0.86)', border: '1px solid rgba(148,163,184,0.22)',
+          borderRadius: '12px', padding: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.25)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '8px' }}>
+            <div>
+              <div style={{ color: '#f8fafc', fontSize: '12px', fontWeight: 800 }}>LaTeX 源码编辑</div>
+              <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '3px', lineHeight: 1.5 }}>
+                这里修改的是当前生成的 .tex 副本；应用后会重新编译并更新右侧 PDF 图片预览。表单变化不会覆盖手动模式，除非恢复自动预览。
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+              {manualLatexPreview && (
+                <button onClick={handleRestoreAutoLatexPreview} disabled={latexEditCompiling} style={{
+                  padding: '7px 10px', borderRadius: '6px', border: '1px solid rgba(148,163,184,0.25)',
+                  background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', cursor: 'pointer', fontSize: '11px', fontWeight: 700
+                }}>
+                  恢复自动预览
+                </button>
+              )}
+              <button onClick={handleApplyLatexSourcePreview} disabled={latexEditCompiling || !latexDraftSource.trim()} style={{
+                padding: '7px 12px', borderRadius: '6px', border: 'none',
+                background: latexEditCompiling ? 'rgba(20,184,166,0.35)' : 'linear-gradient(135deg, #14b8a6, #0f766e)',
+                color: '#fff', cursor: latexEditCompiling ? 'wait' : 'pointer', fontSize: '11px', fontWeight: 800,
+                display: 'flex', alignItems: 'center', gap: '6px'
+              }}>
+                {latexEditCompiling && <Loader size={12} className="animate-spin" />}
+                应用并重新预览
+              </button>
+            </div>
+          </div>
+          <textarea
+            value={latexDraftSource}
+            onChange={(event) => setLatexDraftSource(event.target.value)}
+            spellCheck={false}
+            placeholder="等待当前 LaTeX 模板生成源码后即可编辑..."
+            style={{
+              width: '100%', minHeight: '240px', resize: 'vertical', boxSizing: 'border-box',
+              background: '#020617', color: '#dbeafe', border: '1px solid rgba(148,163,184,0.20)',
+              borderRadius: '8px', padding: '10px', fontFamily: 'SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+              fontSize: '11px', lineHeight: 1.55, outline: 'none'
+            }}
+          />
+          {manualLatexPreview && (
+            <div style={{ marginTop: '8px', color: '#5eead4', fontSize: '11px' }}>
+              当前为手动 LaTeX 预览模式。若继续改左侧表单，请点击“恢复自动预览”。
+            </div>
+          )}
         </div>
       )}
 

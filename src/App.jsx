@@ -16,6 +16,7 @@ export default function App() {
   const [previewImageBase64, setPreviewImageBase64] = useState('');
   const [previewTexSource, setPreviewTexSource] = useState('');
   const [previewMessage, setPreviewMessage] = useState('');
+  const [manualLatexPreview, setManualLatexPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [showApiConfig, setShowApiConfig] = useState(false);
@@ -80,6 +81,7 @@ export default function App() {
     setPreviewTexSource('');
     setPreviewMessage('');
     setLayoutAdjustments({});
+    setManualLatexPreview(false);
 
     window.electronAPI.checkTemplateConfig(selectedTemplate.path)
       .then(res => {
@@ -94,7 +96,8 @@ export default function App() {
   }, [selectedTemplate?.name, selectedTemplate?.path, selectedTemplate?.engineType, selectedTemplate?.kind]);
 
   useEffect(() => {
-    if (!selectedTemplate || !window.electronAPI) {
+    if (!selectedTemplate || !window.electronAPI || manualLatexPreview) {
+      if (manualLatexPreview) return;
       previewRequestIdRef.current += 1;
       setPreviewDocxBase64('');
       setPreviewImageBase64('');
@@ -140,7 +143,7 @@ export default function App() {
     return () => {
       if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
     };
-  }, [resumeData, selectedTemplate, templateEngineType, isDesensitized, layoutAdjustments]);
+  }, [resumeData, selectedTemplate, templateEngineType, isDesensitized, layoutAdjustments, manualLatexPreview]);
 
   const showNotification = useCallback(({ type, message }) => {
     setNotification({ type, message });
@@ -182,7 +185,13 @@ export default function App() {
         previewImageBase64={previewImageBase64}
         previewTexSource={previewTexSource}
         previewMessage={previewMessage}
+        setPreviewMessage={setPreviewMessage}
+        setPreviewImageBase64={setPreviewImageBase64}
+        setPreviewTexSource={setPreviewTexSource}
+        manualLatexPreview={manualLatexPreview}
+        setManualLatexPreview={setManualLatexPreview}
         previewLoading={previewLoading}
+        setPreviewLoading={setPreviewLoading}
         onNotification={showNotification}
         selectedTemplate={selectedTemplate}
         resumeData={resumeData}

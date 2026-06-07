@@ -27,6 +27,36 @@ export default function TemplatePanel({
     const name = template.name || '';
     const displayName = template.displayName || name;
     const richDocx = ['知页简历02', '知页简历03', '简约单页26', '稳重单页03'];
+    const hasPhoto = Boolean(resumeData?.basicInfo?.photo);
+
+    if (isLatex && name === 'academic-profile') {
+      return {
+        score: 99,
+        label: '科研首推',
+        reason: '科研、项目、实践和荣誉分区完整，适合医学/公共卫生/学术型简历。'
+      };
+    }
+    if (isLatex && name === 'altacv-sidebar') {
+      return {
+        score: hasPhoto ? 98 : 94,
+        label: hasPhoto ? '照片首推' : '侧栏推荐',
+        reason: '侧栏预留头像和联系方式，主栏承载完整经历，适合需要照片的中文简历。'
+      };
+    }
+    if (isLatex && name === 'timeline-compact') {
+      return {
+        score: needsFullSections ? 94 : 90,
+        label: '紧凑高密度',
+        reason: '按时间线压缩展示所有板块，适合内容很多但希望控制页数的版本。'
+      };
+    }
+    if (isLatex && name === 'creative-card') {
+      return {
+        score: hasPhoto ? 92 : 88,
+        label: '视觉展示',
+        reason: '名片式头图和双栏收束，适合作品集、社团或展示型投递。'
+      };
+    }
 
     if (isLatex && ['jakes-ats', 'modern-clean'].includes(name)) {
       return {

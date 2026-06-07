@@ -12,12 +12,33 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "fixtures" / "zhou_yufeng_resume.json"
 RENDERER = ROOT / "src" / "utils" / "latex_renderer.py"
-TEMPLATES = ["awesome-accent", "deedy-two-column", "jakes-ats", "modern-clean"]
+PHOTO_PNG_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
 
 
-def run_renderer(template_id: str, output_dir: Path) -> dict:
+def discover_templates() -> list[str]:
     proc = subprocess.run(
-        [sys.executable, str(RENDERER), "render", str(FIXTURE), template_id, str(output_dir)],
+        [sys.executable, str(RENDERER), "list"],
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    payload = json.loads(proc.stdout)
+    return [item.get("id") or item.get("name") for item in payload.get("templates", []) if item.get("id") or item.get("name")]
+
+
+def make_photo_fixture(output_dir: Path) -> Path:
+    data = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    data.setdefault("basicInfo", {})["photo"] = PHOTO_PNG_DATA_URL
+    fixture = output_dir / "zhou_yufeng_resume.with-photo.json"
+    fixture.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return fixture
+
+
+def run_renderer(template_id: str, output_dir: Path, fixture: Path) -> dict:
+    proc = subprocess.run(
+        [sys.executable, str(RENDERER), "render", str(fixture), template_id, str(output_dir)],
         cwd=str(ROOT),
         text=True,
         capture_output=True,
@@ -52,12 +73,14 @@ def main() -> int:
     work_dir = Path(tempfile.mkdtemp(prefix="latex_preview_image_"))
     try:
         validations = []
-        for template_id in TEMPLATES:
+        templates = discover_templates()
+        fixture = make_photo_fixture(work_dir)
+        for template_id in templates:
             template_dir = work_dir / template_id
             thumb_dir = work_dir / f"{template_id}_thumb"
             template_dir.mkdir(parents=True, exist_ok=True)
             thumb_dir.mkdir(parents=True, exist_ok=True)
-            result = run_renderer(template_id, template_dir)
+            result = run_renderer(template_id, template_dir, fixture)
             pdf_path = Path(result.get("pdfPath") or "")
             compiled = bool(result.get("compiled") and pdf_path.exists())
             thumb_ok = compiled and make_thumbnail(pdf_path, thumb_dir)
@@ -72,8 +95,9 @@ def main() -> int:
         ok = all(item["compiled"] and item["thumbnail"] for item in validations)
         print(json.dumps({
             "success": ok,
-            "fixture": str(FIXTURE),
+            "fixture": str(fixture),
             "outputDir": str(work_dir),
+            "templateCount": len(templates),
             "validations": validations,
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
