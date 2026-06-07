@@ -618,3 +618,140 @@ export async function polishText(text, apiConfig, mode = 'professional') {
   const result = await response.json();
   return result.choices[0].message.content.trim();
 }
+
+function normalizeAiUrl(url) {
+  if (!url) return '';
+  url = url.replace(/\/+$/, '');
+  if (url.includes('/chat/completions') || url.match(/\/v\d+\/chat\/completions$/)) return url;
+  if (url.includes('api.openai.com')) return url + '/v1/chat/completions';
+  if (url.includes('api.deepseek.com')) return url + '/chat/completions';
+  if (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost')) return url + '/v1/chat/completions';
+  return url + '/chat/completions';
+}
+
+function countItems(resumeData, key) {
+  return Array.isArray(resumeData?.[key]) ? resumeData[key].length : 0;
+}
+
+function localLatexAdjustmentSuggestion(resumeData = {}, template = {}, current = {}) {
+  const templateName = template?.name || '';
+  const hasPhoto = Boolean(resumeData?.basicInfo?.photo);
+  const totalEntries = ['education', 'experience', 'projects', 'research', 'studentWork']
+    .reduce((sum, key) => sum + countItems(resumeData, key), 0);
+  const dense = totalEntries >= 8 || (resumeData?.skills?.length || 0) >= 5 || (resumeData?.honors?.length || 0) >= 5;
+  const researchHeavy = countItems(resumeData, 'research') + countItems(resumeData, 'projects') >= 3;
+
+  const templateDefaults = {
+    'academic-profile': { accentColor: '#0F766E', photoPosition: 'right', photoShape: 'square' },
+    'altacv-sidebar': { accentColor: '#7C3AED', photoPosition: 'left', photoShape: 'rounded' },
+    'timeline-compact': { accentColor: '#EA580C', photoPosition: 'right', photoShape: 'square' },
+    'creative-card': { accentColor: '#2563EB', photoPosition: 'right', photoShape: 'rounded' },
+    'word-minimal-01': { accentColor: '#2563EB', photoPosition: 'right', photoShape: 'square' },
+    'word-steady-01': { accentColor: '#1E3A8A', photoPosition: 'right', photoShape: 'square' },
+    'word-literary-01': { accentColor: '#B45309', photoPosition: 'top', photoShape: 'rounded' },
+    'word-zhiyue-02': { accentColor: '#4F46E5', photoPosition: 'left', photoShape: 'rounded' },
+  }[templateName] || { accentColor: researchHeavy ? '#0F766E' : '#2563EB', photoPosition: 'right', photoShape: 'rounded' };
+
+  return {
+    adjustments: {
+      ...current,
+      accentColor: templateDefaults.accentColor,
+      photoPosition: hasPhoto ? templateDefaults.photoPosition : 'none',
+      photoShape: templateDefaults.photoShape,
+      showPhoto: hasPhoto,
+      photoScale: hasPhoto ? (dense ? 0.88 : 0.98) : 1,
+      fontScale: dense ? 0.96 : 1.02,
+      spacingScale: dense ? 0.88 : 1.04,
+      compactMode: dense,
+      ...(!hasPhoto ? { photoPosition: 'none', showPhoto: false } : {})
+    },
+    rationale: dense
+      ? '当前内容较密，已建议压缩字号和间距，保留照片但降低占用空间。'
+      : '当前内容密度适中，已建议更舒展的间距和模板匹配主题色。',
+    source: 'local'
+  };
+}
+
+function sanitizeLatexAdjustments(value, fallback) {
+  const allowedPositions = new Set(['left', 'right', 'top', 'none']);
+  const allowedShapes = new Set(['rounded', 'circle', 'square']);
+  const clamp = (num, low, high, def) => {
+    const parsed = Number(num);
+    return Number.isFinite(parsed) ? Math.max(low, Math.min(high, parsed)) : def;
+  };
+  const color = typeof value?.accentColor === 'string' && /^#?[0-9a-fA-F]{6}$/.test(value.accentColor)
+    ? (value.accentColor.startsWith('#') ? value.accentColor : `#${value.accentColor}`)
+    : fallback.accentColor;
+  return {
+    accentColor: color,
+    fontScale: clamp(value?.fontScale, 0.92, 1.12, fallback.fontScale),
+    spacingScale: clamp(value?.spacingScale, 0.82, 1.25, fallback.spacingScale),
+    photoScale: clamp(value?.photoScale, 0.72, 1.35, fallback.photoScale),
+    photoPosition: allowedPositions.has(value?.photoPosition) ? value.photoPosition : fallback.photoPosition,
+    photoShape: allowedShapes.has(value?.photoShape) ? value.photoShape : fallback.photoShape,
+    showPhoto: typeof value?.showPhoto === 'boolean' ? value.showPhoto : fallback.showPhoto,
+    compactMode: typeof value?.compactMode === 'boolean' ? value.compactMode : fallback.compactMode,
+  };
+}
+
+export async function suggestLatexAdjustments(resumeData, template, currentAdjustments = {}, apiConfig = {}) {
+  const local = localLatexAdjustmentSuggestion(resumeData, template, currentAdjustments);
+  const fallback = local.adjustments;
+  if (!apiConfig?.apiUrl || !apiConfig?.apiKey) return local;
+
+  const summary = {
+    template: template?.name || '',
+    displayName: template?.displayName || '',
+    hasPhoto: Boolean(resumeData?.basicInfo?.photo),
+    summaryLength: (resumeData?.basicInfo?.summary || '').length,
+    counts: {
+      education: countItems(resumeData, 'education'),
+      experience: countItems(resumeData, 'experience'),
+      projects: countItems(resumeData, 'projects'),
+      research: countItems(resumeData, 'research'),
+      studentWork: countItems(resumeData, 'studentWork'),
+      honors: Array.isArray(resumeData?.honors) ? resumeData.honors.length : 0,
+      skills: Array.isArray(resumeData?.skills) ? resumeData.skills.length : 0,
+    },
+    currentAdjustments,
+  };
+
+  const systemPrompt = `你是 LaTeX 简历排版顾问。只根据用户已有事实和模板特征给出版式参数，不改写简历事实。
+必须只返回 JSON，不要 markdown。JSON 格式：
+{"adjustments":{"accentColor":"#2563EB","fontScale":1,"spacingScale":1,"photoScale":1,"photoPosition":"right","photoShape":"rounded","showPhoto":true,"compactMode":false},"rationale":"一句中文理由"}
+约束：fontScale 0.92-1.12，spacingScale 0.82-1.25，photoScale 0.72-1.35，photoPosition 只能 left/right/top/none，photoShape 只能 rounded/circle/square。`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    const response = await fetch(normalizeAiUrl(apiConfig.apiUrl), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiConfig.apiKey}`
+      },
+      body: JSON.stringify({
+        model: apiConfig.modelName || 'deepseek-chat',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: JSON.stringify(summary) }
+        ],
+        temperature: 0.2
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    if (!response.ok) throw new Error(`AI 调版失败: HTTP ${response.status}`);
+    const data = await response.json();
+    const content = (data.choices?.[0]?.message?.content || '').replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+    const parsed = JSON.parse(content);
+    return {
+      adjustments: sanitizeLatexAdjustments(parsed.adjustments || {}, fallback),
+      rationale: parsed.rationale || local.rationale,
+      source: 'api'
+    };
+  } catch (err) {
+    console.warn('AI LaTeX 调版失败，使用本地规则:', err.message);
+    return { ...local, error: err.message };
+  }
+}

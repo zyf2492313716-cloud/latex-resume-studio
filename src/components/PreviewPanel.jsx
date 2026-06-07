@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Printer, FileText, Loader, Eye, EyeOff, Palette, Type, Space, Camera, Sparkles } from 'lucide-react';
 import { renderAsync } from 'docx-preview';
-import { polishText } from '../utils/aiParser';
+import { polishText, suggestLatexAdjustments } from '../utils/aiParser';
 import SnapshotModal from './SnapshotModal';
 import InteractiveCanvas from './InteractiveCanvas';
 
@@ -48,6 +48,7 @@ export default function PreviewPanel({
   const [showLatexSourceMode, setShowLatexSourceMode] = useState(false);
   const [latexDraftSource, setLatexDraftSource] = useState('');
   const [latexEditCompiling, setLatexEditCompiling] = useState(false);
+  const [aiLatexAdjusting, setAiLatexAdjusting] = useState(false);
   const latexVisual = {
     accentColor: '#2563EB',
     fontScale: 1,
@@ -74,6 +75,32 @@ export default function PreviewPanel({
         [field]: value
       }
     }));
+  };
+
+  const handleAILatexAdjust = async () => {
+    if (!isLatex || !selectedTemplate || aiLatexAdjusting) return;
+    setManualLatexPreview(false);
+    setAiLatexAdjusting(true);
+    try {
+      const config = window.electronAPI?.getApiConfig ? await window.electronAPI.getApiConfig() : {};
+      onNotification({ type: 'info', message: config?.apiUrl ? 'AI 正在分析当前 LaTeX 版式...' : '未配置 AI，正在使用本地规则调版...' });
+      const suggestion = await suggestLatexAdjustments(
+        isDesensitized ? getDesensitizedData(resumeData) : resumeData,
+        selectedTemplate,
+        layoutAdjustments || {},
+        config || {}
+      );
+      setLayoutAdjustments(prev => ({ ...(prev || {}), ...(suggestion.adjustments || {}) }));
+      setPreviewMessage(`已应用${suggestion.source === 'api' ? 'AI' : '本地'} LaTeX 调版建议：${suggestion.rationale || '已优化当前模板视觉参数。'}`);
+      onNotification({
+        type: suggestion.source === 'api' ? 'success' : 'info',
+        message: `${suggestion.source === 'api' ? 'AI' : '本地规则'}调版已应用：${suggestion.rationale || '已优化当前 LaTeX 版式'}`
+      });
+    } catch (err) {
+      onNotification({ type: 'warning', message: `AI LaTeX 调版失败: ${err.message}` });
+    } finally {
+      setAiLatexAdjusting(false);
+    }
   };
 
   // Automatically trigger backend re-rendering when adjustments change in spatial mode
@@ -523,6 +550,14 @@ export default function PreviewPanel({
               }}>
                 <FileText size={14} /> 预览内编辑
               </button>
+              <button onClick={handleAILatexAdjust} disabled={aiLatexAdjusting} style={{
+                padding: '8px 14px', background: aiLatexAdjusting ? 'rgba(99,102,241,0.18)' : 'linear-gradient(135deg, #8b5cf6, #2563eb)',
+                color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 800,
+                cursor: aiLatexAdjusting ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                fontSize: '12px', boxShadow: '0 4px 12px rgba(99,102,241,0.22)', opacity: aiLatexAdjusting ? 0.75 : 1
+              }}>
+                {aiLatexAdjusting ? <Loader size={14} className="animate-spin" /> : <Sparkles size={14} />} AI 调版
+              </button>
             </>
           ) : (
             <button onClick={handleExportWord} style={{
@@ -834,6 +869,9 @@ export default function PreviewPanel({
                         <div style={{ color: '#5eead4', fontSize: '11px', fontWeight: 900 }}>版式调节</div>
                         <div style={{ color: '#94a3b8', fontSize: '10px', marginTop: '2px' }}>这些控件会同步到 LaTeX 模板参数并重编译预览。</div>
                       </div>
+                      <button onClick={handleAILatexAdjust} disabled={aiLatexAdjusting} style={{ background: aiLatexAdjusting ? 'rgba(99,102,241,0.18)' : 'rgba(139,92,246,0.20)', color: '#ddd6fe', border: '1px solid rgba(139,92,246,0.32)', borderRadius: '7px', padding: '6px 8px', fontSize: '11px', cursor: aiLatexAdjusting ? 'wait' : 'pointer' }}>
+                        {aiLatexAdjusting ? '调版中' : 'AI 调版'}
+                      </button>
                       <button onClick={() => updateLatexVisual({ accentColor: '#2563EB', fontScale: 1, spacingScale: 1, photoScale: 1, photoPosition: 'right', photoShape: 'rounded', showPhoto: true, compactMode: false })} style={{ background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '7px', padding: '6px 8px', fontSize: '11px', cursor: 'pointer' }}>
                         重置
                       </button>

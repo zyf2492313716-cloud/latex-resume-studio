@@ -1,22 +1,23 @@
 \documentclass[10pt,a4paper]{ctexart}
 {% include "_partials/common_macros.tex.j2" %}
-\geometry{left=1.45cm,right=1.45cm,top=1.25cm,bottom=1.25cm}
+\geometry{left=1.35cm,right=1.35cm,top=1.08cm,bottom=1.18cm}
 \definecolor{accent}{HTML}{ {{ visual.accent }} }
 \definecolor{ink}{HTML}{0F172A}
 \definecolor{soft}{HTML}{F8FAFC}
-\renewcommand{\rgSection}[1]{\vspace{ {{ '%.2f'|format(0.58 * visual.spacingScale) }}em}{\large\bfseries\color{ink}#1}\hspace{0.45em}{\color{accent}\rule[0.55ex]{0.18\linewidth}{1pt}}\par\vspace{ {{ '%.2f'|format(0.28 * visual.spacingScale) }}em}}
+\definecolor{band}{HTML}{E2E8F0}
+\renewcommand{\rgSection}[1]{\vspace{ {{ '%.2f'|format(0.58 * visual.spacingScale) }}em}\colorbox{band}{\parbox{0.985\linewidth}{\vspace{0.18em}\bfseries\color{ink}\hspace{0.35em}#1\vspace{0.18em}}}\par\vspace{ {{ '%.2f'|format(0.28 * visual.spacingScale) }}em}}
 
 \begin{document}
 {% set photo_w = '%.2fcm'|format(2.05 * visual.photoScale) %}
 {% set photo_h = '%.2fcm'|format(2.45 * visual.photoScale) %}
 {% set show_photo = basic.hasPhoto and visual.showPhoto and visual.photoPosition != 'none' %}
-\colorbox{soft}{\parbox{0.985\linewidth}{\vspace{0.45em}
+\colorbox{soft}{\parbox{0.985\linewidth}{\vspace{0.50em}
 \begin{tabularx}{\linewidth}{@{}{% if show_photo and visual.photoPosition == 'left' %}p{2.45cm} X{% else %}X p{2.45cm}{% endif %}@{}}
 {% if show_photo and visual.photoPosition == 'left' %}\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.75pt} & {% endif %}
-{\Huge\bfseries\color{ink}{{ basic.name }}}\par{% if basic.title %}\vspace{0.2em}{\Large\color{accent}{{ basic.title }}}\par{% endif %}\vspace{0.35em}{\small {% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.7em}|\hspace{0.7em}{% endif %}{{ contact.value }}{% endfor %}}
+{\Huge\bfseries\color{ink}{{ basic.name }}}\par{}{% if basic.title %}\vspace{0.2em}{\Large\color{accent}{{ basic.title }}}\par{}{% endif %}\vspace{0.35em}{\small {% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.7em}|\hspace{0.7em}{% endif %}{{ contact.value }}{% endfor %}}
 {% if show_photo and visual.photoPosition != 'left' %} & \raggedleft\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.75pt}{% endif %}\\
 \end{tabularx}
-{% if basic.summary %}\vspace{0.35em}{\small\justifying {{ basic.summary }}}\par{% endif %}\vspace{0.45em}}}\par
+{% if basic.summary %}\vspace{0.35em}{\color{accent}\rule{0.16\linewidth}{1pt}}\par{}\vspace{0.20em}{\small\justifying {{ basic.summary }}}\par{% endif %}\vspace{0.45em}}}\par
 
 {% if education %}\rgSection{教育背景}{% for e in education %}\rgEntry{ {{ e.school }} }{ {{ e.date }} }{ {{ e.degree }} {{ e.major }} }{}
 {% if e.bullets %}\begin{rgBullets}{% for bullet in e.bullets %}\item {{ bullet }}
@@ -32,6 +33,6 @@
 {% if studentWork %}\rgSection{组织经历}{% for s in studentWork %}\rgEntry{ {{ s.organization }} }{ {{ s.date }} }{ {{ s.role }} }{}
 {% if s.bullets %}\begin{rgBullets}{% for bullet in s.bullets %}\item {{ bullet }}
 {% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
-{% if skills or honors %}\rgSection{能力与荣誉}{% if skills %}{% for skill in skills %}\fcolorbox{accent}{white}{\small {{ skill }}}\hspace{0.25em}{% endfor %}\par{% endif %}{% if honors %}\begin{rgBullets}{% for item in honors %}\item {{ item }}
+{% if skills or honors %}\rgSection{能力与荣誉}{% if skills %}{% for skill in skills %}\fcolorbox{accent}{white}{\small {{ skill }}}\hspace{0.25em}{% endfor %}\par{}\vspace{0.12em}{% endif %}{% if honors %}\begin{rgBullets}{% for item in honors %}\item {{ item }}
 {% endfor %}\end{rgBullets}{% endif %}{% endif %}
 \end{document}
