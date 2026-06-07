@@ -38,6 +38,7 @@ export default function TemplatePanel({
     'word-steady-01': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
     'word-literary-01': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
     'word-zhiyue-02': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'word-blue-sidebar-01': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
   };
 
   const getCoverageMatch = (template) => {
@@ -73,6 +74,7 @@ export default function TemplatePanel({
           'word-steady-01': '100 分稳重复刻',
           'word-literary-01': '100 分文艺复刻',
           'word-zhiyue-02': '100 分知页复刻',
+          'word-blue-sidebar-01': '100 分蓝栏复刻',
         };
         return {
           score: 100,

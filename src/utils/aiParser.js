@@ -650,6 +650,7 @@ function localLatexAdjustmentSuggestion(resumeData = {}, template = {}, current 
     'word-steady-01': { accentColor: '#1E3A8A', photoPosition: 'right', photoShape: 'square' },
     'word-literary-01': { accentColor: '#B45309', photoPosition: 'top', photoShape: 'rounded' },
     'word-zhiyue-02': { accentColor: '#4F46E5', photoPosition: 'left', photoShape: 'rounded' },
+    'word-blue-sidebar-01': { accentColor: '#244A6A', photoPosition: 'left', photoShape: 'square' },
   }[templateName] || { accentColor: researchHeavy ? '#0F766E' : '#2563EB', photoPosition: 'right', photoShape: 'rounded' };
 
   return {

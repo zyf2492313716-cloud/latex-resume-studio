@@ -1,0 +1,10 @@
+{
+  "id": "word-blue-sidebar-01",
+  "name": "word-blue-sidebar-01",
+  "displayName": "Word Blue Sidebar 深蓝双栏 LaTeX",
+  "group": "Word 风格复刻",
+  "description": "仿截图深蓝左侧栏双栏简历：左栏头像、联系方式、技能与荣誉，右栏教育、项目、实习与学生工作。",
+  "tags": ["双栏", "照片", "深蓝侧栏", "Word复刻", "中文友好", "完整板块", "需编译器"],
+  "source": "Original implementation inspired by the user's WPS two-column resume screenshot",
+  "license": "Original template implementation for LaTeX Resume Studio"
+}
