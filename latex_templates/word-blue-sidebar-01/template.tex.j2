@@ -1,48 +1,49 @@
 \documentclass[10pt,a4paper]{ctexart}
 {% include "_partials/common_macros.tex.j2" %}
 \usepackage{eso-pic}
-\geometry{left=6.25cm,right=0.95cm,top=0.90cm,bottom=0.95cm}
+\geometry{left=5.55cm,right=0.92cm,top=0.82cm,bottom=0.92cm}
 \definecolor{accent}{HTML}{ {{ visual.accent }} }
 \definecolor{sidebar}{HTML}{244A6A}
 \definecolor{sidebarSoft}{HTML}{D8E6F0}
 \definecolor{ink}{HTML}{172033}
 \definecolor{muted}{HTML}{5B6472}
 \definecolor{rule}{HTML}{244A6A}
-\renewcommand{\rgSection}[1]{\vspace{ {{ '%.2f'|format(0.42 * visual.spacingScale) }}em}{\large\bfseries\color{rule}#1}\par\vspace{0.10em}{\color{rule}\rule{\linewidth}{0.90pt}}\vspace{ {{ '%.2f'|format(0.20 * visual.spacingScale) }}em}}
+\renewcommand{\rgSection}[1]{\par\vspace{ {{ '%.2f'|format(0.45 * visual.spacingScale) }}em}{\Large\bfseries\color{rule}#1}\par\vspace{0.10em}{\color{rule}\rule{\linewidth}{0.95pt}}\par\vspace{ {{ '%.2f'|format(0.24 * visual.spacingScale) }}em}}
 {% raw %}
 \renewcommand{\rgEntry}[4]{%
-  \begin{tabularx}{\linewidth}{@{}X r@{}}
-    {\bfseries\color{rule}#1} & {\scriptsize\color{muted}#2} \\
-    {\small #3} & {\scriptsize\color{muted}#4} \\
-  \end{tabularx}\par\vspace{-0.45em}%
+  \par\noindent\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.72\linewidth}>{\raggedleft\arraybackslash}p{0.26\linewidth}@{}}
+    {\bfseries\color{rule}#1} & {\footnotesize\color{muted}#2} \\
+    {\small #3} & {\footnotesize\color{muted}#4} \\
+  \end{tabularx}\par\vspace{-0.28em}%
 }
-\newcommand{\blueSideTitle}[1]{\vspace{0.70em}{\bfseries\color{white}#1}\par\vspace{0.20em}{\color{sidebarSoft}\rule{0.76\linewidth}{0.55pt}}\par\vspace{0.22em}}
-\newcommand{\blueSideText}[1]{{\scriptsize\color{white}#1}\par\vspace{0.18em}}
+\newcommand{\blueSideTitle}[1]{\vspace{0.78em}{\large\bfseries\color{white}#1}\par\vspace{0.20em}{\color{sidebarSoft}\rule{0.82\linewidth}{0.6pt}}\par\vspace{0.24em}}
+\newcommand{\blueSideText}[1]{{\footnotesize\color{white}#1}\par\vspace{0.20em}}
+\newcommand{\blueContact}[1]{{\scriptsize\color{sidebarSoft}\raggedright #1}\par\vspace{0.18em}}
 {% endraw %}
 
 \begin{document}
 {% set show_photo = basic.hasPhoto and visual.showPhoto and visual.photoPosition != 'none' %}
-{% set photo_w = '%.2fcm'|format(2.35 * visual.photoScale) %}
-{% set photo_h = '%.2fcm'|format(2.85 * visual.photoScale) %}
+{% set photo_w = '%.2fcm'|format(2.15 * visual.photoScale) %}
+{% set photo_h = '%.2fcm'|format(2.62 * visual.photoScale) %}
 {% set sidebar_items = basic.contacts %}
-\AddToShipoutPictureBG*{\AtPageLowerLeft{\color{sidebar}\rule{5.30cm}{\paperheight}}}
-\AddToShipoutPictureFG*{\AtPageUpperLeft{\hspace{0.70cm}\raisebox{-1.05cm}{\parbox[t]{3.95cm}{\centering
+\AddToShipoutPictureBG*{\AtPageLowerLeft{\color{sidebar}\rule{4.82cm}{\paperheight}}}
+\AddToShipoutPictureFG*{\AtPageUpperLeft{\hspace{0.55cm}\raisebox{-0.92cm}{\parbox[t]{3.72cm}{\centering
 {% if show_photo %}
-\rgPhotoFrame{white}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.6pt}\par\vspace{0.48em}
-{% else %}
-\rgPhotoPlaceholder{white}{sidebar}{ {{ basic.name }} }\par\vspace{0.48em}
+\rgPhotoFrame{white}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.6pt}\par\vspace{0.42em}
 {% endif %}
-{\scriptsize\color{sidebarSoft}{% if basic.title %}{{ basic.title }}{% else %}简历信息{% endif %}}\par\vspace{0.30em}
-{% for contact in sidebar_items %}\blueSideText{\raggedright {{ contact.value }} }{% endfor %}
-{% if education %}\blueSideText{ {{ education[0].school }} · {{ education[0].major }} }{% endif %}
+{\bfseries\color{white}{{ basic.name }}}\par{}
+{% if basic.title %}{\footnotesize\color{sidebarSoft}{{ basic.title }}}\par{}{% endif %}
+\vspace{0.30em}{\color{sidebarSoft}\rule{0.78\linewidth}{0.6pt}}\par\vspace{0.28em}
+{% for contact in sidebar_items %}\blueContact{ {{ contact.value }} }{% endfor %}
+{% if education %}\blueContact{ {{ education[0].school }} · {{ education[0].major }} }{% endif %}
 {% if basic.summary %}\blueSideTitle{个人概览}\raggedright\blueSideText{ {{ basic.summary }} }{% endif %}
 {% if skills %}\blueSideTitle{专业技能}\raggedright{% for skill in skills %}\blueSideText{\textbullet\hspace{0.35em}{{ skill }} }{% endfor %}{% endif %}
 {% if honors %}\blueSideTitle{荣誉奖励}\raggedright{% for item in honors[:5] %}\blueSideText{\textbullet\hspace{0.35em}{{ item }} }{% endfor %}{% endif %}
 }}}}
-\vspace*{-0.10em}
+\vspace*{-0.06em}
 {\Huge\bfseries\color{rule}{{ basic.name }}}\par{}
-{% if basic.title %}{\small\color{muted}求职意向：{{ basic.title }}}\par{}{% endif %}
-\vspace{0.28em}{\color{rule}\rule{0.34\linewidth}{1.1pt}}\par\vspace{0.35em}
+{% if basic.title %}{\normalsize\color{muted}求职意向：{{ basic.title }}}\par{}{% endif %}
+\vspace{0.25em}{\color{rule}\rule{0.30\linewidth}{1.15pt}}\par\vspace{0.32em}
 {% if education %}\rgSection{教育背景}{% for e in education %}\rgEntry{ {{ e.school }} }{ {{ e.date }} }{ {{ e.degree }} · {{ e.major }} }{}
 {% if e.bullets %}\begin{rgBullets}{% for bullet in e.bullets %}\item {{ bullet }}
 {% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}

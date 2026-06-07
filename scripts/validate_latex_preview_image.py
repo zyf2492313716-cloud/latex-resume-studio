@@ -70,18 +70,23 @@ def make_thumbnail(pdf_path: Path, output_dir: Path) -> bool:
     return proc.returncode == 0 and any(output_dir.glob("*.png"))
 
 
-def first_page_has_text(pdf_path: Path) -> bool:
+def first_page_has_text(pdf_path: Path) -> tuple[bool, str]:
     pdftotext = shutil.which("pdftotext")
     if not pdftotext:
-        return True
-    proc = subprocess.run(
-        [pdftotext, "-f", "1", "-l", "1", str(pdf_path), "-"],
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=30,
-    )
-    return bool(proc.stdout.replace("\f", "").strip())
+        return True, ""
+    try:
+        proc = subprocess.run(
+            [pdftotext, "-f", "1", "-l", "1", str(pdf_path), "-"],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=45,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "pdftotext first-page check timed out"
+    if proc.returncode != 0:
+        return False, (proc.stderr or "pdftotext first-page check failed").strip()
+    return bool(proc.stdout.replace("\f", "").strip()), ""
 
 
 def main() -> int:
@@ -99,14 +104,14 @@ def main() -> int:
             pdf_path = Path(result.get("pdfPath") or "")
             compiled = bool(result.get("compiled") and pdf_path.exists())
             thumb_ok = compiled and make_thumbnail(pdf_path, thumb_dir)
-            first_page_ok = compiled and first_page_has_text(pdf_path)
+            first_page_ok, first_page_error = first_page_has_text(pdf_path) if compiled else (False, "")
             validations.append({
                 "templateId": template_id,
                 "compiled": compiled,
                 "pdfPath": str(pdf_path) if compiled else None,
                 "thumbnail": thumb_ok,
                 "firstPageHasText": first_page_ok,
-                "error": result.get("compileError") or result.get("error") or "",
+                "error": result.get("compileError") or result.get("error") or first_page_error,
             })
 
         ok = all(item["compiled"] and item["thumbnail"] and item["firstPageHasText"] for item in validations)
