@@ -223,8 +223,16 @@ export function parseWithLocalRules(text) {
   const emailMatch = text.match(emailRegex);
   if (emailMatch) result.basicInfo.email = emailMatch[1];
 
-  const nameBlacklist = ["求职", "简历", "意向", "电话", "邮箱", "自我", "评价", "总结", "个人", "基本", "信息", "姓名"];
+  const sectionHeaders = ["教育背景", "教育经历", "学历教育", "科研经历", "科研项目", "实习经历", "工作经历", "实践经历", "学生工作", "社会实践", "学生活动", "项目经验", "专业技能", "个人技能", "掌握技能", "核心技能", "技能特长", "荣誉奖励", "获奖情况", "所获荣誉", "荣誉奖项", "自我评价", "个人总结", "个人简介"];
+  const nameBlacklist = ["求职", "简历", "意向", "电话", "邮箱", "自我", "评价", "总结", "个人", "基本", "信息", "姓名", ...sectionHeaders];
   result.basicInfo.name = text.match(/姓名[：:]\s*([\u4e00-\u9fa5]{2,4})/)?.[1] || "";
+  if (!result.basicInfo.name && lineEntries[0]) {
+    const firstParts = lineEntries[0].clean.split(/[|｜]/).map(s => s.trim()).filter(Boolean);
+    const candidate = firstParts[0] || "";
+    if (/^[\u4e00-\u9fa5]{2,4}$/.test(candidate) && !nameBlacklist.some(b => candidate.includes(b))) {
+      result.basicInfo.name = candidate;
+    }
+  }
   if (!result.basicInfo.name) {
     for (let i = 0; i < Math.min(lineEntries.length, 5); i++) {
       const line = lineEntries[i].clean;
@@ -234,7 +242,7 @@ export function parseWithLocalRules(text) {
       }
     }
   }
-  if (!result.basicInfo.name && lineEntries[0] && lineEntries[0].clean.length < 8 && !lineEntries[0].clean.includes(":") && !lineEntries[0].clean.includes("：")) {
+  if (!result.basicInfo.name && lineEntries[0] && lineEntries[0].clean.length < 8 && !lineEntries[0].clean.includes(":") && !lineEntries[0].clean.includes("：") && !nameBlacklist.some(b => lineEntries[0].clean.includes(b))) {
     result.basicInfo.name = lineEntries[0].clean;
   }
 
@@ -274,7 +282,7 @@ export function parseWithLocalRules(text) {
       }
       const cleaned = line.replace(/^[-•·*\d]+[.、\s)]*/, "").trim();
       if (cleaned) {
-        const parts = cleaned.split(/[,，、;；]/).map(s => s.trim()).filter(s => s && s.length > 1);
+        const parts = cleaned.split(/[,，、;；]/).map(s => s.trim()).filter(s => s && (s.length > 1 || s === 'R'));
         parts.forEach(p => {
           if (!skillLines.some(existing => existing.includes(p))) skillLines.push(p);
         });
@@ -293,6 +301,35 @@ export function parseWithLocalRules(text) {
   let currentSW = null;
   let currentHonors = [];
   let summaryLines = [];
+
+  const datePattern = /(\d{4}[.\-/]\d{1,2}\s*[-~—至]\s*(?:\d{4}[.\-/]\d{1,2}|至今|毕业)|\d{4}\s*[-~—至]\s*(?:\d{4}|至今))/;
+
+  function extractDate(line) {
+    return line.match(datePattern)?.[1]?.replace(/\s+/g, '') || "";
+  }
+
+  function stripDate(line) {
+    return line.replace(datePattern, '').replace(/[（）()]/g, ' ').trim();
+  }
+
+  function parseStudentWorkLine(line) {
+    const date = extractDate(line);
+    const lineWithoutDate = stripDate(line).replace(/["“”]/g, '').trim();
+    let org = lineWithoutDate, role = "";
+    const roleWords = ["项目组织部部长", "调研专报部研究助理", "权益部副部长", "优秀志愿者", "副部长", "部长", "研究助理", "助理", "主席", "干事", "部员", "副主任", "主任", "志愿者"];
+    const roleWord = roleWords.find(rw => lineWithoutDate.endsWith(rw) || lineWithoutDate.includes(rw));
+    if (roleWord) {
+      role = roleWord;
+      org = lineWithoutDate.replace(roleWord, '').replace(/[、，,|｜]+$/, '').trim();
+    }
+    if (!role) role = "成员";
+    return {
+      organization: (org || line).replace(/^[\d]+[.、\s)]*/, "").trim(),
+      role: role.trim() || "",
+      date,
+      description: ""
+    };
+  }
 
   function detectSection(line) {
     if (line.length >= 12) return "";
@@ -339,23 +376,25 @@ export function parseWithLocalRules(text) {
     }
 
     if (currentSection === "edu") {
-      if ((line.includes("大学") || line.includes("学院")) && line.length < 40 && !/^(交流|交换|访学|暑期)/.test(line)) {
+      if ((line.includes("大学") || line.includes("学院")) && line.length < 60 && !/^(交流|交换|访学|暑期)/.test(line) && !line.includes("暑期学校")) {
         if (currentEdu) result.education.push(currentEdu);
         let degree = "本科";
         if (line.includes("硕士") || line.includes("研究生")) degree = "硕士";
         else if (line.includes("博士")) degree = "博士";
         else if (line.includes("大专") || line.includes("专科")) degree = "大专";
-        const dateMatch = line.match(/(\d{4}[.\-/]\d{2}.*?(?:\d{4}[.\-/]\d{2}|至今|毕业))/);
-        const date = dateMatch ? dateMatch[1] : "";
+        const date = extractDate(line);
         let school = "", major = "";
         if (line.includes("|")) {
           const parts = line.split("|").map(s => s.trim());
           school = parts.find(p => p.includes("大学") || p.includes("学院")) || parts[0] || "";
-          const rest = parts.filter(p => p !== school && !/^\d{4}/.test(p)).join(" ");
+          const rest = stripDate(parts.filter(p => p !== school && !/^\d{4}/.test(p)).join(" "));
           const mm = rest.match(/^([^\s·（（]+)/);
           major = mm ? mm[1] : "";
         } else {
-          const parts = line.split(/[\s,，|]+/).filter(p => p !== "");
+          const withoutDate = stripDate(line);
+          const degreeMatch = withoutDate.match(/[（(](本科|硕士|博士|大专|专科|研究生)[）)]/);
+          if (degreeMatch) degree = degreeMatch[1] === '研究生' ? '硕士' : degreeMatch[1];
+          const parts = withoutDate.replace(/[（(](本科|硕士|博士|大专|专科|研究生)[）)]/g, ' ').split(/[\s,，|]+/).filter(p => p !== "");
           school = parts.find(p => p.includes("大学") || p.includes("学院")) || parts[0] || "";
           major = parts.find(p => !p.includes("大学") && !p.includes("学院") && !/^(硕士|本科|博士|大专|专科)$/.test(p) && !/^\d{4}/.test(p) && p.length < 10) || "";
         }
@@ -370,7 +409,7 @@ export function parseWithLocalRules(text) {
       const hasInstitution = /(公司|集团|中心|医院|局|疾控|大学|学院|机构|署|办)/.test(line);
       if (pipeParts.length >= 2 && (hasDate || hasInstitution || pipeParts[0].length < 20)) {
         if (currentExp) result.experience.push(currentExp);
-        const dateMatch = line.match(/(\d{4}[.\-/]\d{2}.*?(?:\d{4}[.\-/]\d{2}|至今))/);
+        const dateMatch = line.match(datePattern);
         currentExp = {
           company: pipeParts[0].replace(/^[\d]+[.、\s)]*/, "").trim() || "",
           role: pipeParts[1] || "",
@@ -379,7 +418,7 @@ export function parseWithLocalRules(text) {
         };
       } else if (hasInstitution && line.length < 40) {
         if (currentExp) result.experience.push(currentExp);
-        const dateMatch = line.match(/(\d{4}[.\-/]\d{2}.*?(?:\d{4}[.\-/]\d{2}|至今))/);
+        const dateMatch = line.match(datePattern);
         const parts = line.split(/[\s,，|]+/).filter(p => p !== "");
         const company = (parts.find(p => /(公司|集团|中心|医院|局|疾控|大学|学院|机构|署|办)/.test(p)) || parts[0] || "").replace(/^[\d]+[.、\s)]*/, "").trim();
         const role = parts.find(p => !/(公司|集团|中心|医院|局|疾控|大学|学院|机构|署|办)/.test(p) && !p.includes("至今") && !/^\d{4}/.test(p) && !/^[.\-/]/.test(p)) || "";
@@ -393,7 +432,7 @@ export function parseWithLocalRules(text) {
       const hasDate = /\d{4}[.\-/]/.test(line);
       if (pipeParts.length >= 2 && (hasDate || pipeParts[0].length < 30)) {
         if (currentProj) result.projects.push(currentProj);
-        const dateMatch = line.match(/(\d{4}[.\-/]\d{2}.*?(?:\d{4}[.\-/]\d{2}|至今))/);
+        const dateMatch = line.match(datePattern);
         currentProj = {
           name: pipeParts[0] || "",
           role: pipeParts.length >= 3 ? pipeParts[1] : (line.includes("负责人") ? "项目负责人" : "核心成员"),
@@ -402,7 +441,7 @@ export function parseWithLocalRules(text) {
         };
       } else if ((line.includes("项目") || line.includes("系统") || line.includes("平台") || line.includes("应用")) && line.length < 40) {
         if (currentProj) result.projects.push(currentProj);
-        const dateMatch = line.match(/(\d{4}[.\-/]\d{2}.*?(?:\d{4}[.\-/]\d{2}|至今))/);
+        const dateMatch = line.match(datePattern);
         const parts = line.split(/[\s,，|]+/).filter(p => p !== "");
         const name = parts.find(p => p.includes("项目") || p.includes("系统") || p.includes("平台") || p.includes("应用")) || parts[0] || "";
         const role = parts.find(p => p !== name && !p.includes("至今") && !/^\d{4}/.test(p) && !/^[.\-/]/.test(p)) || "核心成员";
@@ -416,7 +455,7 @@ export function parseWithLocalRules(text) {
       const hasDate = /\d{4}[.\-/]/.test(line);
       if (pipeParts.length >= 2 && (hasDate || pipeParts[0].length < 30)) {
         if (currentResearch) result.research.push(currentResearch);
-        const dateMatch = line.match(/(\d{4}[.\-/]\d{2}.*?(?:\d{4}[.\-/]\d{2}|至今))/);
+        const dateMatch = line.match(datePattern);
         currentResearch = {
           name: pipeParts[0].replace(/^[\d]+[.、\s)]*/, "").trim() || "",
           role: pipeParts.length >= 3 ? pipeParts[1] : (line.includes("负责人") ? "项目负责人" : "核心成员"),
@@ -427,7 +466,7 @@ export function parseWithLocalRules(text) {
         const hasDate = /(?:19|20)\d{2}[-/.]\d{1,2}/.test(line);
         if (hasDate && line.length < 40) {
           if (currentResearch) result.research.push(currentResearch);
-          const dateMatch = line.match(/(\d{4}[.\-/]\d{2}.*?(?:\d{4}[.\-/]\d{2}|至今))/);
+          const dateMatch = line.match(datePattern);
           currentResearch = {
             name: line.replace(/^[\d]+[.、\s)]*/, "").trim(),
             role: "核心成员",
@@ -444,32 +483,15 @@ export function parseWithLocalRules(text) {
       const hasRoleKW = line.includes("部长") || line.includes("副部长") || line.includes("助理") || line.includes("主席") || line.includes("干事") || line.includes("研究") || line.includes("志愿者");
       if (hasOrg && hasRoleKW && line.length < 80) {
         if (currentSW) result.studentWork.push(currentSW);
-        const dateMatch = line.match(/(\d{4}[.\-/]\d{2}.*?(?:\d{4}[.\-/]\d{2}|至今))/);
-        const parts = line.split(/[\s,，|]+/).filter(p => p !== "");
-        let org = "", role = "";
-        const roleWords = ["副部长", "部长", "助理", "主席", "干事", "部员", "副主任", "主任"];
-        const orgWords = ["学生", "社团", "中心", "大学", "学院"];
-        for (const p of parts) {
-          const isRole = roleWords.some(rw => p.includes(rw));
-          const isOrg = orgWords.some(ow => p.includes(ow));
-          if (isRole) {
-            role = (role ? role + " " : "") + p;
-          } else if (isOrg || p.includes("会") || p.includes("研究") || p.includes("队") || p.includes("团")) {
-            org = (org ? org + " " : "") + p;
-          } else if (p.includes("部") || p.includes("办")) {
-            org = (org ? org + " " : "") + p;
+        if (line.includes('、') && !extractDate(line)) {
+          const parts = line.split('、').map(part => part.trim()).filter(Boolean);
+          if (parts.length > 1 && parts.every(part => /部长|助理|主席|干事|志愿者/.test(part))) {
+            parts.forEach(part => result.studentWork.push(parseStudentWorkLine(part)));
+            currentSW = null;
+            return;
           }
         }
-        if (!role && org) {
-          role = (parts.find(p => p !== org && !/^\d{4}/.test(p) && !p.includes("实践") && !p.includes("活动") && !p.includes("证书")) || "").trim();
-        }
-        if (!role) role = "成员";
-        currentSW = {
-          organization: (org || line).replace(/^[\d]+[.、\s)]*/, "").trim(),
-          role: role.trim() || "",
-          date: dateMatch ? dateMatch[1] : "",
-          description: ""
-        };
+        currentSW = parseStudentWorkLine(line);
       } else if (currentSW) {
         currentSW.description += (currentSW.description ? "\n" : "") + line;
       }

@@ -4,13 +4,12 @@
 \definecolor{accent}{HTML}{0F766E}
 \definecolor{muted}{HTML}{4B5563}
 \renewcommand{\rgCompactSection}[1]{\vspace{0.55em}{\bfseries\large\color{accent}#1}\par\vspace{0.12em}{\color{accent}\rule{\linewidth}{0.7pt}}\vspace{0.25em}}
-\setlist[itemize]{label={\color{accent}\tiny\textbullet}, leftmargin=1.1em, itemsep=0.08em, topsep=0.12em}
 
 \begin{document}
 {\Huge\bfseries {{ basic.name }}}\par
 {% if basic.title %}{\Large\color{accent}{{ basic.title }}}\par{% endif %}
 \vspace{0.15em}
-{\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\quad | \quad{% endif %}{{ contact.value }}{% endfor %}}\par
+{\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.8em}|\hspace{0.8em}{% endif %}{{ contact.value }}{% endfor %}}\par
 \vspace{0.5em}
 {\color{accent}\rule{\linewidth}{1.2pt}}\par\vspace{0.5em}
 

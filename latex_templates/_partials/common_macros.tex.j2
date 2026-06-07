@@ -2,7 +2,6 @@
 % Template code is original; external projects are used only as style references.
 \usepackage{geometry}
 \usepackage{xcolor}
-\usepackage{enumitem}
 \usepackage{tabularx}
 \usepackage{array}
 \usepackage[hidelinks]{hyperref}
@@ -41,7 +40,11 @@
 }
 
 \newenvironment{rgBullets}{
-  \begin{itemize}[leftmargin=1.25em, itemsep=0.12em, topsep=0.15em, parsep=0em]
+  \begin{itemize}
+  \setlength{\leftskip}{0.2em}
+  \setlength{\itemsep}{0.12em}
+  \setlength{\topsep}{0.15em}
+  \setlength{\parsep}{0em}
 }{
   \end{itemize}\vspace{0.15em}
 }

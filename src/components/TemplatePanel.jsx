@@ -14,9 +14,47 @@ export default function TemplatePanel({
   templateList,
   selectedTemplate,
   setSelectedTemplate,
-  onReloadTemplates
+  onReloadTemplates,
+  resumeData
 }) {
   const [configStatus, setConfigStatus] = useState({});
+
+  const hasItems = (key) => Array.isArray(resumeData?.[key]) && resumeData[key].length > 0;
+  const needsFullSections = hasItems('projects') || hasItems('research') || hasItems('studentWork');
+
+  const getTemplateMatch = (template) => {
+    const isLatex = template.kind === 'latex' || template.engineType === 'latex';
+    const name = template.name || '';
+    const displayName = template.displayName || name;
+    const richDocx = ['知页简历02', '知页简历03', '简约单页26', '稳重单页03'];
+
+    if (isLatex && ['jakes-ats', 'modern-clean'].includes(name)) {
+      return {
+        score: 98,
+        label: '完整推荐',
+        reason: '覆盖教育、工作、项目、科研、学生工作、荣誉和技能，适合这份信息量较大的简历。'
+      };
+    }
+    if (isLatex) {
+      return {
+        score: needsFullSections ? 90 : 82,
+        label: '高匹配',
+        reason: 'LaTeX 模板支持完整结构化模块，适合导出 .tex 或编译 PDF。'
+      };
+    }
+    if (richDocx.some(item => displayName.includes(item) || name.includes(item))) {
+      return {
+        score: needsFullSections ? 76 : 86,
+        label: 'DOCX 压缩版',
+        reason: 'DOCX 版适合 Word 投递，但项目和科研信息可能需要合并压缩到经历区。'
+      };
+    }
+    return {
+      score: needsFullSections ? 48 : 62,
+      label: needsFullSections ? '信息承载弱' : '可用',
+      reason: needsFullSections ? '该模板区域较少，容易遗漏项目、科研或学生工作信息。' : '适合基础单页简历。'
+    };
+  };
 
   useEffect(() => {
     if (!window.electronAPI?.checkTemplateConfig || !templateList.length) return;
@@ -113,6 +151,11 @@ export default function TemplatePanel({
     grouped[group].push(t);
   });
 
+  const recommendedTemplates = [...templateList]
+    .map(t => ({ template: t, match: getTemplateMatch(t) }))
+    .sort((a, b) => b.match.score - a.match.score)
+    .slice(0, 3);
+
   const handleSelectDir = async () => {
     if (!window.electronAPI) return;
     const result = await window.electronAPI.selectTemplateDir();
@@ -162,7 +205,43 @@ export default function TemplatePanel({
             </button>
           </div>
         ) : (
-          Object.entries(grouped).map(([group, templates]) => (
+          <>
+            {recommendedTemplates.length > 0 && (
+              <div style={{
+                padding: '10px', borderRadius: '10px',
+                background: 'linear-gradient(135deg, rgba(124,58,237,0.16), rgba(14,165,233,0.10))',
+                border: '1px solid rgba(196,181,253,0.22)'
+              }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#ddd6fe', marginBottom: '8px' }}>
+                  根据当前内容推荐
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {recommendedTemplates.map(({ template, match }) => (
+                    <button
+                      key={template.name}
+                      onClick={() => setSelectedTemplate(template)}
+                      title={match.reason}
+                      style={{
+                        textAlign: 'left', padding: '8px', borderRadius: '8px', cursor: 'pointer',
+                        background: selectedTemplate?.name === template.name ? 'rgba(59,130,246,0.22)' : 'rgba(255,255,255,0.06)',
+                        border: selectedTemplate?.name === template.name ? '1px solid #60a5fa' : '1px solid rgba(255,255,255,0.10)',
+                        color: '#f8fafc'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 800 }}>{template.displayName}</span>
+                        <span style={{ fontSize: '10px', color: '#a7f3d0', fontWeight: 800 }}>{match.score}%</span>
+                      </div>
+                      <div style={{ marginTop: '3px', fontSize: '10px', color: '#cbd5e1', lineHeight: 1.35 }}>
+                        {match.label}：{match.reason}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {Object.entries(grouped).map(([group, templates]) => (
             <div key={group}>
               <div style={{
                 fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)',
@@ -172,10 +251,11 @@ export default function TemplatePanel({
                 {group} ({templates.length})
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {templates.map(t => {
+                {[...templates].sort((a, b) => getTemplateMatch(b).score - getTemplateMatch(a).score).map(t => {
                   const isSelected = selectedTemplate?.name === t.name;
                   const isLatex = t.kind === 'latex' || t.engineType === 'latex';
                   const tags = (t.tags || []).slice(0, 4);
+                  const match = getTemplateMatch(t);
                   return (
                     <div key={t.name}
                       onClick={() => { setSelectedTemplate(t); }}
@@ -190,6 +270,16 @@ export default function TemplatePanel({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
                         <FileText size={12} style={{ flexShrink: 0, color: isLatex ? '#c4b5fd' : undefined }} />
                         <span>{t.displayName}</span>
+                        {match.score >= 90 && (
+                          <span title={match.reason} style={{
+                            fontSize: '9px', lineHeight: 1,
+                            color: '#a7f3d0', background: 'rgba(16,185,129,0.12)',
+                            border: '1px solid rgba(16,185,129,0.28)',
+                            borderRadius: '999px', padding: '3px 5px', fontWeight: 800
+                          }}>
+                            {match.label}
+                          </span>
+                        )}
                         {getStatusIcon(t.name)}
                       </div>
                       {isLatex && tags.length > 0 && (
@@ -212,7 +302,8 @@ export default function TemplatePanel({
                 })}
               </div>
             </div>
-          ))
+            ))}
+          </>
         )}
       </div>
     </div>

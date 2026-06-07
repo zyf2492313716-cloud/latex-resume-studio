@@ -4,14 +4,13 @@
 \definecolor{accent}{HTML}{111827}
 \definecolor{muted}{HTML}{4B5563}
 \renewcommand{\rgSection}[1]{\vspace{0.45em}{\large\bfseries\color{accent}#1}\par\vspace{0.18em}\hrule\vspace{0.35em}}
-\setlist[itemize]{label=\raisebox{0.2ex}{\tiny$\bullet$}}
 
 \begin{document}
 \begin{center}
   {\LARGE\bfseries {{ basic.name }}}\\[-0.1em]
   {% if basic.title %}{\small\color{muted}{{ basic.title }}}\\[0.15em]{% endif %}
   {\small
-  {% for contact in basic.contacts %}{% if not loop.first %}\quad$\cdot$\quad{% endif %}{{ contact.value }}{% endfor %}
+  {% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.8em}$\cdot$\hspace{0.8em}{% endif %}{{ contact.value }}{% endfor %}
   }
 \end{center}
 \vspace{-0.35em}
@@ -24,7 +23,7 @@
 {% if education %}
 \rgSection{教育经历}
 {% for e in education %}
-\rgEntry{ {{ e.school }} }{ {{ e.date }} }{ {{ e.degree }}{% if e.degree and e.major %}\quad | \quad{% endif %}{{ e.major }} }{}
+\rgEntry{ {{ e.school }} }{ {{ e.date }} }{ {{ e.degree }}{% if e.degree and e.major %}\hspace{0.6em}|\hspace{0.6em}{% endif %}{{ e.major }} }{}
 {% if e.bullets %}\begin{rgBullets}
 {% for bullet in e.bullets %}\item {{ bullet }}
 {% endfor %}\end{rgBullets}{% endif %}

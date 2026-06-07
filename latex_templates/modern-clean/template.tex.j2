@@ -9,7 +9,7 @@
 \begin{document}
 {\Huge\bfseries {{ basic.name }}}\hfill {% if basic.title %}{\Large\color{accent}{{ basic.title }}}{% endif %}\par
 \vspace{0.25em}
-{\small\color{textgray}{% for contact in basic.contacts %}{% if not loop.first %}\quad | \quad{% endif %}{{ contact.label }}：{{ contact.value }}{% endfor %}}\par
+{\small\color{textgray}{% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.8em}|\hspace{0.8em}{% endif %}{{ contact.label }}：{{ contact.value }}{% endfor %}}\par
 \vspace{0.55em}
 {% if basic.summary %}
 \colorbox{soft}{\parbox{0.985\linewidth}{\small\color{textgray}\vspace{0.35em}{{ basic.summary }}\vspace{0.35em}}}\par
@@ -18,7 +18,7 @@
 {% if education %}
 \rgSection{教育背景}
 {% for e in education %}
-\rgEntry{ {{ e.school }} }{ {{ e.date }} }{ {{ e.degree }}{% if e.degree and e.major %}\quad · \quad{% endif %}{{ e.major }} }{}
+\rgEntry{ {{ e.school }} }{ {{ e.date }} }{ {{ e.degree }}{% if e.degree and e.major %}\hspace{0.6em}·\hspace{0.6em}{% endif %}{{ e.major }} }{}
 {% if e.bullets %}\begin{rgBullets}
 {% for bullet in e.bullets %}\item {{ bullet }}
 {% endfor %}\end{rgBullets}{% endif %}

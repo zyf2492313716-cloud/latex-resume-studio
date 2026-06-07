@@ -262,6 +262,18 @@ function cleanupLatexOutput(result) {
   }
 }
 
+function readLatexTexSource(result) {
+  if (!result?.texPath || !fs.existsSync(result.texPath)) return '';
+  try {
+    const source = fs.readFileSync(result.texPath, 'utf-8');
+    // Keep IPC payload bounded while still showing the complete useful preview.
+    return source.length > 80000 ? `${source.slice(0, 80000)}\n\n% ... preview truncated ...` : source;
+  } catch (err) {
+    console.error('Read LaTeX source preview error:', err.message);
+    return '';
+  }
+}
+
 function safeExportStem(value) {
   return String(value || '我的').replace(/[\\/:*?"<>|]+/g, '_').trim() || '我的';
 }
@@ -614,7 +626,20 @@ ipcMain.handle('render-preview', async (event, { templateName, resumeData, layou
     let result = null;
     try {
       result = await renderLatexTemplate(template, resumeData, { noCompile: false });
+      const texSource = readLatexTexSource(result);
       if (!result.success) {
+        if (texSource) {
+          return {
+            success: true,
+            engineType: 'latex',
+            texPath: result.texPath,
+            texSource,
+            compiled: false,
+            missingCompiler: Boolean(result.missingCompiler || !result.compiler?.available),
+            compiler: result.compiler,
+            message: result.error || result.stderr || 'LaTeX PDF 预览失败；可导出 .tex 查看源码。'
+          };
+        }
         return { success: false, engineType: 'latex', error: result.error || 'LaTeX 渲染失败' };
       }
       if (result.missingCompiler || !result.compiled || !result.pdfPath || !fs.existsSync(result.pdfPath)) {
@@ -622,10 +647,11 @@ ipcMain.handle('render-preview', async (event, { templateName, resumeData, layou
           success: true,
           engineType: 'latex',
           texPath: result.texPath,
+          texSource,
           compiled: false,
           missingCompiler: Boolean(result.missingCompiler || !result.compiler?.available),
           compiler: result.compiler,
-          message: result.compiler?.message || '未检测到 LaTeX 编译器；当前可导出 .tex。'
+          message: result.message || result.error || result.compiler?.message || '未检测到 LaTeX 编译器；可导出 .tex 到 Overleaf 或本地编译。'
         };
       }
       const previewImageBase64 = await renderFileQuickLookPreview(result.pdfPath, '1600');
@@ -634,9 +660,11 @@ ipcMain.handle('render-preview', async (event, { templateName, resumeData, layou
         engineType: 'latex',
         texPath: result.texPath,
         pdfPath: result.pdfPath,
+        texSource: previewImageBase64 ? '' : texSource,
         compiled: true,
         compiler: result.compiler,
-        previewImageBase64
+        previewImageBase64,
+        message: previewImageBase64 ? '' : 'PDF 已生成，但系统图片预览转换失败；可导出 .tex 或编译 PDF。'
       };
     } catch (err) {
       return { success: false, engineType: 'latex', error: 'LaTeX 预览失败: ' + err.message };

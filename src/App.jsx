@@ -14,6 +14,8 @@ export default function App() {
   const [templateList, setTemplateList] = useState([]);
   const [previewDocxBase64, setPreviewDocxBase64] = useState('');
   const [previewImageBase64, setPreviewImageBase64] = useState('');
+  const [previewTexSource, setPreviewTexSource] = useState('');
+  const [previewMessage, setPreviewMessage] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [showApiConfig, setShowApiConfig] = useState(false);
@@ -63,6 +65,8 @@ export default function App() {
       setTemplateEngineType('yaml');
       setPreviewDocxBase64('');
       setPreviewImageBase64('');
+      setPreviewTexSource('');
+      setPreviewMessage('');
       return;
     }
 
@@ -73,6 +77,8 @@ export default function App() {
     setTemplateEngineType(immediateEngineType);
     setPreviewDocxBase64('');
     setPreviewImageBase64('');
+    setPreviewTexSource('');
+    setPreviewMessage('');
     setLayoutAdjustments({});
 
     window.electronAPI.checkTemplateConfig(selectedTemplate.path)
@@ -92,6 +98,8 @@ export default function App() {
       previewRequestIdRef.current += 1;
       setPreviewDocxBase64('');
       setPreviewImageBase64('');
+      setPreviewTexSource('');
+      setPreviewMessage('');
       setPreviewLoading(false);
       return;
     }
@@ -112,8 +120,11 @@ export default function App() {
           if (result.success) {
             setPreviewDocxBase64(result.docxBase64 || '');
             setPreviewImageBase64(result.previewImageBase64 || '');
+            setPreviewTexSource(result.texSource || '');
+            setPreviewMessage(result.message || '');
           } else {
             console.error('Preview error:', result.error);
+            setPreviewMessage(result.error || '预览渲染失败');
             showNotification({ type: 'warning', message: `预览渲染失败: ${result.error}` });
           }
           setPreviewLoading(false);
@@ -121,6 +132,7 @@ export default function App() {
         .catch(err => {
           if (requestId !== previewRequestIdRef.current) return;
           console.error('Preview IPC error:', err);
+          setPreviewMessage(err.message || '预览 IPC 错误');
           showNotification({ type: 'warning', message: `预览 IPC 错误: ${err.message}` });
           setPreviewLoading(false);
         });
@@ -168,6 +180,8 @@ export default function App() {
       <PreviewPanel
         previewDocxBase64={previewDocxBase64}
         previewImageBase64={previewImageBase64}
+        previewTexSource={previewTexSource}
+        previewMessage={previewMessage}
         previewLoading={previewLoading}
         onNotification={showNotification}
         selectedTemplate={selectedTemplate}
@@ -185,6 +199,7 @@ export default function App() {
         selectedTemplate={selectedTemplate}
         setSelectedTemplate={setSelectedTemplate}
         onReloadTemplates={loadTemplates}
+        resumeData={resumeData}
       />
 
       <UpdateNotification />

@@ -8,6 +8,8 @@ import InteractiveCanvas from './InteractiveCanvas';
 export default function PreviewPanel({
   previewDocxBase64,
   previewImageBase64,
+  previewTexSource,
+  previewMessage,
   previewLoading,
   onNotification,
   selectedTemplate,
@@ -581,7 +583,7 @@ export default function PreviewPanel({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280' }}>
                 <Loader size={20} className="animate-spin" />
-                <span>{isLatex ? '正在渲染 LaTeX PDF 预览...' : '正在渲染真实 Word 图片预览...'}</span>
+                <span>{isLatex ? '正在生成 LaTeX 预览...' : '正在渲染真实 Word 图片预览...'}</span>
               </div>
             </div>
           )}
@@ -609,9 +611,11 @@ export default function PreviewPanel({
               justifyContent: 'center', height: '1123px', color: '#9ca3af', gap: '10px'
             }}>
               <FileText size={32} />
-              <div style={{ fontSize: '14px' }}>{isLatex ? 'LaTeX PDF 图片预览暂不可用' : '请先在左侧编辑简历数据，右侧选择模板'}</div>
-              <div style={{ fontSize: '12px' }}>
-                {isLatex ? '当前可导出 .tex；安装 Tectonic/MacTeX 或配置 XeLaTeX 后可生成 PDF 预览。' : '选中模板后将自动生成预览'}
+              <div style={{ fontSize: '14px' }}>{isLatex ? 'LaTeX PDF 预览暂未生成' : '请先在左侧编辑简历数据，右侧选择模板'}</div>
+              <div style={{ fontSize: '12px', maxWidth: '520px', textAlign: 'center', lineHeight: 1.6 }}>
+                {isLatex
+                  ? (previewMessage || '正在编译 LaTeX 并生成 PDF 图片预览；如果失败，请检查编译器或点击“导出 .tex”查看源码。')
+                  : '选中模板后将自动生成预览'}
               </div>
             </div>
           )}
