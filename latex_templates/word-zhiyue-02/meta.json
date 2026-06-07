@@ -1,0 +1,12 @@
+{
+  "id": "word-zhiyue-02",
+  "name": "word-zhiyue-02",
+  "displayName": "Word Zhiyue 知页复刻 LaTeX",
+  "group": "LaTeX 模板",
+  "tags": ["知页", "照片", "Word复刻", "双栏", "中文友好"],
+  "engineType": "latex",
+  "kind": "latex",
+  "recommendedCompiler": "xelatex",
+  "source": "Original LaTeX recreation of the app's former Zhiyue Word style",
+  "license": "Original implementation"
+}

@@ -1,18 +1,35 @@
 \documentclass[10pt,a4paper]{ctexart}
 {% include "_partials/common_macros.tex.j2" %}
 \geometry{left=1.45cm,right=1.45cm,top=1.25cm,bottom=1.25cm}
-\definecolor{accent}{HTML}{0F766E}
+\definecolor{accent}{HTML}{ {{ visual.accent }} }
 \definecolor{soft}{HTML}{ECFDF5}
 \definecolor{ink}{HTML}{111827}
 \definecolor{muted}{HTML}{4B5563}
-\renewcommand{\rgSection}[1]{\vspace{0.5em}{\Large\bfseries\color{accent}#1}\par\vspace{0.12em}{\color{accent}\rule{\linewidth}{0.9pt}}\vspace{0.32em}}
+\renewcommand{\rgSection}[1]{\vspace{ {{ '%.2f'|format(0.50 * visual.spacingScale) }}em}{\Large\bfseries\color{accent}#1}\par\vspace{0.12em}{\color{accent}\rule{\linewidth}{0.9pt}}\vspace{ {{ '%.2f'|format(0.32 * visual.spacingScale) }}em}}
 
 \begin{document}
+{% set photo_w = '%.2fcm'|format(2.15 * visual.photoScale) %}
+{% set photo_h = '%.2fcm'|format(2.55 * visual.photoScale) %}
+{% set photo_rule = '0.6pt' if visual.photoShape == 'square' else '1.1pt' %}
+{% set show_photo = basic.hasPhoto and visual.showPhoto and visual.photoPosition != 'none' %}
+{% if show_photo and visual.photoPosition == 'top' %}
+\begin{center}
+\rgPhotoFrame{accent}{ {{ basic.photoPath }} }{ {{ photo_w }} }{ {{ photo_h }} }{ {{ photo_rule }} }\par\vspace{0.35em}
+{\Huge\bfseries\color{ink}{{ basic.name }}}{% if basic.title %}\hspace{0.8em}{\Large\color{accent}{{ basic.title }}}{% endif %}\par
+\end{center}
+{% else %}
+{% if show_photo and visual.photoPosition == 'left' %}
+\begin{tabularx}{\linewidth}{@{}p{ {{ '%.2fcm'|format(2.75 * visual.photoScale) }} } X@{}}
+\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{ {{ photo_rule }} } & {\Huge\bfseries\color{ink}{{ basic.name }}}\par{% if basic.title %}{\Large\color{accent}{{ basic.title }}}{% endif %} \\
+\end{tabularx}
+{% else %}
 \begin{tabularx}{\linewidth}{@{}X r@{}}
 {\Huge\bfseries\color{ink}{{ basic.name }}} &
-{% if basic.hasPhoto %}\includegraphics[width=2.25cm,height=2.75cm,keepaspectratio]{ {{- basic.photoPath -}} }{% else %}\rgPhotoPlaceholder{accent}{soft}{ {{ basic.name }} }{% endif %} \\
+{% if show_photo and visual.photoPosition == 'right' %}\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{ {{ photo_rule }} }{% else %}{% endif %} \\
 {% if basic.title %}{\Large\color{accent}{{ basic.title }}}{% endif %} & \\
 \end{tabularx}
+{% endif %}
+{% endif %}
 \vspace{-0.35em}
 {\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.8em}|\hspace{0.8em}{% endif %}{{ contact.label }}：{{ contact.value }}{% endfor %}}\par
 {% if basic.summary %}\vspace{0.45em}\colorbox{soft}{\parbox{0.985\linewidth}{\small\justifying\vspace{0.3em}{{ basic.summary }}\vspace{0.3em}}}\par{% endif %}

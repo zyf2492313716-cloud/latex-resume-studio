@@ -1,0 +1,12 @@
+{
+  "id": "word-steady-01",
+  "name": "word-steady-01",
+  "displayName": "Word Steady 稳重复刻 LaTeX",
+  "group": "LaTeX 模板",
+  "tags": ["稳重", "照片", "Word复刻", "正式", "中文友好"],
+  "engineType": "latex",
+  "kind": "latex",
+  "recommendedCompiler": "xelatex",
+  "source": "Original LaTeX recreation of the app's former steady Word style",
+  "license": "Original implementation"
+}

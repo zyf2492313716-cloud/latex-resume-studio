@@ -1,0 +1,41 @@
+\documentclass[10pt,a4paper]{ctexart}
+{% include "_partials/common_macros.tex.j2" %}
+\geometry{left=1.25cm,right=1.25cm,top=1.15cm,bottom=1.15cm}
+\definecolor{accent}{HTML}{ {{ visual.accent }} }
+\definecolor{side}{HTML}{EEF2FF}
+\definecolor{ink}{HTML}{111827}
+\renewcommand{\rgSection}[1]{\vspace{ {{ '%.2f'|format(0.48 * visual.spacingScale) }}em}{\large\bfseries\color{accent}#1}\par\vspace{0.12em}{\color{accent}\rule{\linewidth}{0.8pt}}\vspace{ {{ '%.2f'|format(0.24 * visual.spacingScale) }}em}}
+
+\begin{document}
+{% set photo_w = '%.2fcm'|format(2.05 * visual.photoScale) %}
+{% set photo_h = '%.2fcm'|format(2.45 * visual.photoScale) %}
+{% set show_photo = basic.hasPhoto and visual.showPhoto and visual.photoPosition != 'none' %}
+\begin{minipage}[t]{0.31\linewidth}
+\colorbox{side}{\parbox{0.92\linewidth}{\vspace{0.7em}\centering
+{% if show_photo %}\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.7pt}\par\vspace{0.5em}{% endif %}
+{\LARGE\bfseries\color{ink}{{ basic.name }}}\par
+{% if basic.title %}\vspace{0.15em}{\color{accent}{{ basic.title }}}\par{% endif %}
+\vspace{0.55em}{\small {% for contact in basic.contacts %}{{ contact.label }}：{{ contact.value }}{% if not loop.last %}\par{}{% endif %}{% endfor %}}
+{% if skills %}\vspace{0.55em}{\bfseries\color{accent}技能}\par{% for skill in skills %}{\small {{ skill }}}\par{% endfor %}{% endif %}
+{% if honors %}\vspace{0.55em}{\bfseries\color{accent}荣誉}\par{% for item in honors %}{\scriptsize {{ item }}}\par\vspace{0.12em}{% endfor %}{% endif %}
+\vspace{0.7em}}}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.65\linewidth}
+{% if basic.summary %}\rgSection{个人概要}{\small\justifying {{ basic.summary }}}\par{% endif %}
+{% if education %}\rgSection{教育背景}{% for e in education %}\rgEntry{ {{ e.school }} }{ {{ e.date }} }{ {{ e.degree }} {{ e.major }} }{}
+{% if e.bullets %}\begin{rgBullets}{% for bullet in e.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+{% if experience %}\rgSection{工作经历}{% for e in experience %}\rgEntry{ {{ e.company }} }{ {{ e.date }} }{ {{ e.role }} }{}
+{% if e.bullets %}\begin{rgBullets}{% for bullet in e.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+{% if research %}\rgSection{科研经历}{% for r in research %}\rgEntry{ {{ r.name }} }{ {{ r.date }} }{ {{ r.role }} }{}
+{% if r.bullets %}\begin{rgBullets}{% for bullet in r.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+{% if projects %}\rgSection{项目经历}{% for p in projects %}\rgEntry{ {{ p.name }} }{ {{ p.date }} }{ {{ p.role }} }{}
+{% if p.bullets %}\begin{rgBullets}{% for bullet in p.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+{% if studentWork %}\rgSection{学生工作}{% for s in studentWork %}\rgEntry{ {{ s.organization }} }{ {{ s.date }} }{ {{ s.role }} }{}
+{% if s.bullets %}\begin{rgBullets}{% for bullet in s.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+\end{minipage}
+\end{document}

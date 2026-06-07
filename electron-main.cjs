@@ -15,9 +15,6 @@ const RESUME_DEV_PORT = Number(process.env.RESUME_DEV_PORT || 3101);
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 console.log('[LaTeX Resume Studio] userData:', app.getPath('userData'));
 console.log('[LaTeX Resume Studio] devPort:', RESUME_DEV_PORT);
-const BUNDLED_TEMPLATES = app.isPackaged
-  ? path.join(process.resourcesPath, 'templates')
-  : path.join(__dirname, 'templates');
 const LATEX_TEMPLATES_DIR = process.env.LATEX_TEMPLATES_DIR
   ? path.resolve(process.env.LATEX_TEMPLATES_DIR)
   : (app.isPackaged ? path.join(process.resourcesPath, 'latex_templates') : path.join(__dirname, 'latex_templates'));
@@ -44,45 +41,7 @@ function saveConfig(cfg) {
   try { fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf-8'); } catch (e) {}
 }
 
-function getTemplatesDir() {
-  const cfg = loadConfig();
-  if (cfg.templatesDir && fs.existsSync(cfg.templatesDir)) return cfg.templatesDir;
-  const candidates = [
-    BUNDLED_TEMPLATES,
-    path.join(app.getPath('home'), 'Downloads', '1 单页简历'),
-    path.join(app.getPath('home'), 'Downloads', '单页简历'),
-    path.join(app.getPath('desktop'), '1 单页简历'),
-    path.join(__dirname, 'templates'),
-  ];
-  for (const dir of candidates) {
-    if (fs.existsSync(dir)) {
-      const hasDocx = fs.readdirSync(dir).some(f => f.endsWith('.docx'));
-      if (hasDocx) { saveConfig({ ...cfg, templatesDir: dir }); return dir; }
-    }
-  }
-  return null;
-}
-
 let mainWindow = null;
-
-function scanDocxTemplates() {
-  try {
-    const dir = getTemplatesDir();
-    if (!dir || !fs.existsSync(dir)) return [];
-    const files = fs.readdirSync(dir)
-      .filter(f => f.endsWith('.docx') && !f.startsWith('.') && !f.includes('.docxtpl.') && !f.includes('.marked.'))
-      .sort();
-    return files.map(name => ({
-      name,
-      displayName: name.replace('.docx', ''),
-      path: path.join(dir, name),
-      kind: 'docx'
-    }));
-  } catch (e) {
-    console.error('Scan DOCX templates error:', e);
-    return [];
-  }
-}
 
 function scanLatexTemplates() {
   try {
@@ -118,7 +77,7 @@ function scanLatexTemplates() {
 }
 
 function scanTemplates() {
-  return [...scanDocxTemplates(), ...scanLatexTemplates()];
+  return scanLatexTemplates();
 }
 
 function findTemplateByName(templateName) {
@@ -238,11 +197,15 @@ async function getLatexCompilerStatus() {
   return result;
 }
 
-async function renderLatexTemplate(template, resumeData, { noCompile = false } = {}) {
+async function renderLatexTemplate(template, resumeData, { noCompile = false, layoutAdjustments = null } = {}) {
   const tempJson = makeTempPath('latex_resume', '.json');
   const outputDir = makeTempPath(noCompile ? 'latex_tex' : 'latex_pdf', '');
   fs.mkdirSync(outputDir, { recursive: true });
-  fs.writeFileSync(tempJson, JSON.stringify(resumeData, null, 2), 'utf-8');
+  const dataForLatex = {
+    ...(resumeData || {}),
+    __visual: layoutAdjustments && typeof layoutAdjustments === 'object' ? layoutAdjustments : {}
+  };
+  fs.writeFileSync(tempJson, JSON.stringify(dataForLatex, null, 2), 'utf-8');
 
   try {
     const args = ['render', tempJson, template.id || template.name, outputDir];
@@ -430,7 +393,7 @@ function createWindow() {
     height: 920,
     minWidth: 1024,
     minHeight: 700,
-    title: "LaTeX 简历工坊 | Word + LaTeX 简历生成器",
+    title: "LaTeX 简历工坊 | 可视化 LaTeX 简历生成器",
     icon: WINDOW_ICON,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -564,25 +527,6 @@ ipcMain.handle('check-template-config', async (event, { templatePath }) => {
   let configPath = templatePath.replace('.docx', '.yaml');
   let hasYaml = fs.existsSync(configPath);
   
-  // Fall back to bundled templates dir for config files
-  if (!hasDocxtpl || !hasYaml) {
-    const baseName = path.basename(templatePath);
-    if (!hasDocxtpl) {
-      const altDocxtpl = path.join(BUNDLED_TEMPLATES, baseName.replace('.docx', '.docxtpl.docx'));
-      if (fs.existsSync(altDocxtpl)) {
-        docxtplPath = altDocxtpl;
-        hasDocxtpl = true;
-      }
-    }
-    if (!hasYaml) {
-      const altYaml = path.join(BUNDLED_TEMPLATES, baseName.replace('.docx', '.yaml'));
-      if (fs.existsSync(altYaml)) {
-        configPath = altYaml;
-        hasYaml = true;
-      }
-    }
-  }
-  
   const baseName = path.basename(templatePath, '.docx');
   let engineType = 'spatial';
   let fallback = false;
@@ -603,16 +547,6 @@ ipcMain.handle('check-template-config', async (event, { templatePath }) => {
 });
 
 ipcMain.handle('select-template-dir', async () => {
-  if (!mainWindow) return { success: false };
-  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-    title: '选择简历模板文件夹',
-    properties: ['openDirectory'],
-    defaultPath: getTemplatesDir() || app.getPath('downloads')
-  });
-  if (canceled || !filePaths[0]) return { success: false };
-  const cfg = loadConfig();
-  cfg.templatesDir = filePaths[0];
-  saveConfig(cfg);
   return { success: true, count: scanTemplates().length };
 });
 
@@ -643,7 +577,7 @@ ipcMain.handle('render-preview', async (event, { templateName, resumeData, layou
   if (template.kind === 'latex' || template.engineType === 'latex') {
     let result = null;
     try {
-      result = await renderLatexTemplate(template, resumeData, { noCompile: false });
+      result = await renderLatexTemplate(template, resumeData, { noCompile: false, layoutAdjustments });
       const texSource = readLatexTexSource(result);
       if (!result.success) {
         if (texSource) {
@@ -832,7 +766,7 @@ ipcMain.on('export-to-word', async (event, { templateName, resumeData, layoutAdj
   });
 });
 
-ipcMain.on('export-latex-tex', async (event, { templateName, resumeData }) => {
+ipcMain.on('export-latex-tex', async (event, { templateName, resumeData, layoutAdjustments }) => {
   if (!mainWindow) return;
   const template = findTemplateByName(templateName);
   if (!template || template.kind !== 'latex') {
@@ -853,7 +787,7 @@ ipcMain.on('export-latex-tex', async (event, { templateName, resumeData }) => {
 
   let result = null;
   try {
-    result = await renderLatexTemplate(template, resumeData, { noCompile: true });
+    result = await renderLatexTemplate(template, resumeData, { noCompile: true, layoutAdjustments });
     if (!result.success || !result.texPath || !fs.existsSync(result.texPath)) {
       event.reply('latex-tex-failed', result.error || 'LaTeX 源文件生成失败');
       return;
@@ -867,7 +801,7 @@ ipcMain.on('export-latex-tex', async (event, { templateName, resumeData }) => {
   }
 });
 
-ipcMain.on('export-latex-pdf', async (event, { templateName, resumeData }) => {
+ipcMain.on('export-latex-pdf', async (event, { templateName, resumeData, layoutAdjustments }) => {
   if (!mainWindow) return;
   const template = findTemplateByName(templateName);
   if (!template || template.kind !== 'latex') {
@@ -894,7 +828,7 @@ ipcMain.on('export-latex-pdf', async (event, { templateName, resumeData }) => {
 
   let result = null;
   try {
-    result = await renderLatexTemplate(template, resumeData, { noCompile: false });
+    result = await renderLatexTemplate(template, resumeData, { noCompile: false, layoutAdjustments });
     if (!result.success || !result.compiled || !result.pdfPath || !fs.existsSync(result.pdfPath)) {
       event.reply('latex-pdf-failed', result.error || result.compileError || result.compiler?.message || 'LaTeX PDF 编译失败');
       return;

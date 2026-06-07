@@ -141,6 +141,43 @@ def clean_text(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value)).strip()
 
 
+def clamp_number(value: Any, default: float, low: float, high: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(low, min(high, number))
+
+
+def sanitize_color(value: Any, default: str) -> str:
+    text = clean_text(value).lstrip("#").upper()
+    return text if re.fullmatch(r"[0-9A-F]{6}", text) else default
+
+
+def normalize_visual(raw: Dict[str, Any]) -> Dict[str, Any]:
+    visual = raw.get("__visual") or {}
+    if not isinstance(visual, dict):
+        visual = {}
+
+    photo_position = clean_text(visual.get("photoPosition") or "right")
+    if photo_position not in {"left", "right", "top", "none"}:
+        photo_position = "right"
+    photo_shape = clean_text(visual.get("photoShape") or "rounded")
+    if photo_shape not in {"rounded", "circle", "square"}:
+        photo_shape = "rounded"
+
+    return {
+        "accent": sanitize_color(visual.get("accentColor"), "2563EB"),
+        "fontScale": clamp_number(visual.get("fontScale"), 1.0, 0.92, 1.12),
+        "spacingScale": clamp_number(visual.get("spacingScale"), 1.0, 0.82, 1.25),
+        "photoScale": clamp_number(visual.get("photoScale"), 1.0, 0.72, 1.35),
+        "photoPosition": photo_position,
+        "photoShape": photo_shape,
+        "showPhoto": bool(visual.get("showPhoto", True)),
+        "compactMode": bool(visual.get("compactMode", False)),
+    }
+
+
 def split_description(value: Any) -> List[str]:
     if value is None:
         return []
@@ -266,6 +303,7 @@ def normalize_context(raw: Dict[str, Any], meta: Dict[str, Any], output_dir: Opt
     }
     return {
         "meta": meta,
+        "visual": normalize_visual(raw),
         "basic": normalize_basic(normalized_raw),
         "education": education,
         "experience": experience,

@@ -1,30 +1,29 @@
 \documentclass[10pt,a4paper]{ctexart}
 {% include "_partials/common_macros.tex.j2" %}
 \geometry{left=1.2cm,right=1.2cm,top=1.15cm,bottom=1.15cm}
-\definecolor{accent}{HTML}{7C3AED}
+\definecolor{accent}{HTML}{ {{ visual.accent }} }
 \definecolor{sidebg}{HTML}{F5F3FF}
 \definecolor{ink}{HTML}{1F2937}
 \definecolor{muted}{HTML}{6B7280}
-\renewcommand{\rgSection}[1]{\vspace{0.55em}{\large\bfseries\color{accent}#1}\par\vspace{0.18em}{\color{accent}\rule{\linewidth}{0.8pt}}\vspace{0.28em}}
+\renewcommand{\rgSection}[1]{\vspace{ {{ '%.2f'|format(0.55 * visual.spacingScale) }}em}{\large\bfseries\color{accent}#1}\par\vspace{0.18em}{\color{accent}\rule{\linewidth}{0.8pt}}\vspace{ {{ '%.2f'|format(0.28 * visual.spacingScale) }}em}}
 
 \begin{document}
+{% set photo_w = '%.2fcm'|format(2.15 * visual.photoScale) %}
+{% set photo_h = '%.2fcm'|format(2.55 * visual.photoScale) %}
+{% set show_photo = basic.hasPhoto and visual.showPhoto and visual.photoPosition != 'none' %}
 \setlength{\fboxsep}{0.7em}
 \noindent\colorbox{sidebg}{\parbox{0.965\linewidth}{
-\begin{tabularx}{\linewidth}{@{}p{2.65cm} X@{}}
-\centering
-{% if basic.hasPhoto %}
-\includegraphics[width=2.35cm,height=2.85cm,keepaspectratio]{ {{- basic.photoPath -}} }
-{% else %}
-\rgPhotoPlaceholder{accent}{white}{ {{ basic.name }} }
-{% endif %}
-&
-\raggedright
-{\Huge\bfseries\color{ink}{{ basic.name }}}\par
-{% if basic.title %}\vspace{0.2em}{\Large\color{accent}{{ basic.title }}}\par{% endif %}
-\vspace{0.45em}{\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.8em}|\hspace{0.8em}{% endif %}{{ contact.label }}：{{ contact.value }}{% endfor %}}\par
-{% if skills %}\vspace{0.55em}{\bfseries\color{accent}技能}\quad {% for skill in skills %}\fcolorbox{accent}{white}{\scriptsize {{ skill }}}\hspace{0.25em}{% endfor %}{% endif %}
-\\
+{% if show_photo and visual.photoPosition == 'right' %}
+\begin{tabularx}{\linewidth}{@{}X p{ {{ '%.2fcm'|format(2.75 * visual.photoScale) }} }@{}}
+\raggedright {\Huge\bfseries\color{ink}{{ basic.name }}}\par{% if basic.title %}\vspace{0.2em}{\Large\color{accent}{{ basic.title }}}\par{% endif %}\vspace{0.45em}{\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.8em}|\hspace{0.8em}{% endif %}{{ contact.label }}：{{ contact.value }}{% endfor %}}\par{% if skills %}\vspace{0.55em}{\bfseries\color{accent}技能}\hspace{0.5em}{% for skill in skills %}\fcolorbox{accent}{white}{\scriptsize {{ skill }}}\hspace{0.25em}{% endfor %}{% endif %} & \raggedleft\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.9pt} \\
 \end{tabularx}
+{% elif show_photo and visual.photoPosition == 'top' %}
+\begin{center}\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.9pt}\par\vspace{0.28em}{\Huge\bfseries\color{ink}{{ basic.name }}}\par{% if basic.title %}\vspace{0.15em}{\Large\color{accent}{{ basic.title }}}\par{% endif %}{\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.8em}|\hspace{0.8em}{% endif %}{{ contact.label }}：{{ contact.value }}{% endfor %}}\end{center}
+{% else %}
+\begin{tabularx}{\linewidth}{@{}p{ {{ '%.2fcm'|format(2.75 * visual.photoScale) }} } X@{}}
+\centering{% if show_photo %}\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.9pt}{% else %}\rgPhotoPlaceholder{accent}{white}{ {{ basic.name }} }{% endif %} & \raggedright {\Huge\bfseries\color{ink}{{ basic.name }}}\par{% if basic.title %}\vspace{0.2em}{\Large\color{accent}{{ basic.title }}}\par{% endif %}\vspace{0.45em}{\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.8em}|\hspace{0.8em}{% endif %}{{ contact.label }}：{{ contact.value }}{% endfor %}}\par{% if skills %}\vspace{0.55em}{\bfseries\color{accent}技能}\hspace{0.5em}{% for skill in skills %}\fcolorbox{accent}{white}{\scriptsize {{ skill }}}\hspace{0.25em}{% endfor %}{% endif %} \\
+\end{tabularx}
+{% endif %}
 }}
 \vspace{0.35em}
 

@@ -20,10 +20,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getLatexCompilerStatus: () => ipcRenderer.invoke('get-latex-compiler-status'),
   renderLatexSourcePreview: (source, name, resumeData) => ipcRenderer.invoke('render-latex-source-preview', { source, name, resumeData }),
-  exportLatexTex: (templateName, resumeData) => ipcRenderer.send('export-latex-tex', { templateName, resumeData }),
+  exportLatexTex: (templateName, resumeData, layoutAdjustments) => ipcRenderer.send('export-latex-tex', { templateName, resumeData, layoutAdjustments }),
   onLatexTexSaved: (callback) => { const h = (e, ...a) => callback(...a); ipcRenderer.on('latex-tex-saved', h); return () => ipcRenderer.removeListener('latex-tex-saved', h); },
   onLatexTexFailed: (callback) => { const h = (e, ...a) => callback(...a); ipcRenderer.on('latex-tex-failed', h); return () => ipcRenderer.removeListener('latex-tex-failed', h); },
-  exportLatexPdf: (templateName, resumeData) => ipcRenderer.send('export-latex-pdf', { templateName, resumeData }),
+  exportLatexPdf: (templateName, resumeData, layoutAdjustments) => ipcRenderer.send('export-latex-pdf', { templateName, resumeData, layoutAdjustments }),
   onLatexPdfSaved: (callback) => { const h = (e, ...a) => callback(...a); ipcRenderer.on('latex-pdf-saved', h); return () => ipcRenderer.removeListener('latex-pdf-saved', h); },
   onLatexPdfFailed: (callback) => { const h = (e, ...a) => callback(...a); ipcRenderer.on('latex-pdf-failed', h); return () => ipcRenderer.removeListener('latex-pdf-failed', h); },
 

@@ -1,0 +1,12 @@
+{
+  "id": "word-literary-01",
+  "name": "word-literary-01",
+  "displayName": "Word Literary 文艺复刻 LaTeX",
+  "group": "LaTeX 模板",
+  "tags": ["文艺", "照片", "Word复刻", "柔和", "中文友好"],
+  "engineType": "latex",
+  "kind": "latex",
+  "recommendedCompiler": "xelatex",
+  "source": "Original LaTeX recreation of the app's former literary Word style",
+  "license": "Original implementation"
+}

@@ -1,17 +1,28 @@
 \documentclass[9.5pt,a4paper]{ctexart}
 {% include "_partials/common_macros.tex.j2" %}
 \geometry{left=1.25cm,right=1.25cm,top=1.1cm,bottom=1.1cm}
-\definecolor{accent}{HTML}{EA580C}
+\definecolor{accent}{HTML}{ {{ visual.accent }} }
 \definecolor{line}{HTML}{FDBA74}
 \definecolor{ink}{HTML}{111827}
-\renewcommand{\rgSection}[1]{\vspace{0.42em}{\large\bfseries\color{accent}#1}\par\vspace{0.12em}{\color{line}\rule{\linewidth}{0.7pt}}\vspace{0.25em}}
+\renewcommand{\rgSection}[1]{\vspace{ {{ '%.2f'|format(0.42 * visual.spacingScale) }}em}{\large\bfseries\color{accent}#1}\par\vspace{0.12em}{\color{line}\rule{\linewidth}{0.7pt}}\vspace{ {{ '%.2f'|format(0.25 * visual.spacingScale) }}em}}
 
 \begin{document}
-\begin{tabularx}{\linewidth}{@{}l X@{}}
-{% if basic.hasPhoto %}\includegraphics[width=1.7cm,height=2.05cm,keepaspectratio]{ {{- basic.photoPath -}} }{% else %}\fcolorbox{accent}{white}{\parbox[c][1.75cm][c]{1.55cm}{\centering\scriptsize\bfseries {{ basic.name }}}}{% endif %}
-& {\Huge\bfseries\color{ink}{{ basic.name }}}{% if basic.title %}\hspace{0.8em}{\Large\color{accent}{{ basic.title }}}{% endif %}\par\vspace{0.16em}
-{\small {% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.7em}|\hspace{0.7em}{% endif %}{{ contact.value }}{% endfor %}} \\
+{% set photo_w = '%.2fcm'|format(1.65 * visual.photoScale) %}
+{% set photo_h = '%.2fcm'|format(1.95 * visual.photoScale) %}
+{% set show_photo = basic.hasPhoto and visual.showPhoto and visual.photoPosition != 'none' %}
+{% if show_photo and visual.photoPosition == 'left' %}
+\begin{tabularx}{\linewidth}{@{}p{ {{ '%.2fcm'|format(2.05 * visual.photoScale) }} } X@{}}
+\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.7pt} & {\Huge\bfseries\color{ink}{{ basic.name }}}{% if basic.title %}\hspace{0.8em}{\Large\color{accent}{{ basic.title }}}{% endif %}\par\vspace{0.16em}{\small {% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.7em}|\hspace{0.7em}{% endif %}{{ contact.value }}{% endfor %}} \\
 \end{tabularx}
+{% elif show_photo and visual.photoPosition == 'right' %}
+\begin{tabularx}{\linewidth}{@{}X p{ {{ '%.2fcm'|format(2.05 * visual.photoScale) }} }@{}}
+{\Huge\bfseries\color{ink}{{ basic.name }}}{% if basic.title %}\hspace{0.8em}{\Large\color{accent}{{ basic.title }}}{% endif %}\par\vspace{0.16em}{\small {% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.7em}|\hspace{0.7em}{% endif %}{{ contact.value }}{% endfor %}} & \raggedleft\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.7pt} \\
+\end{tabularx}
+{% elif show_photo and visual.photoPosition == 'top' %}
+\begin{center}\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.7pt}\par\vspace{0.25em}{\Huge\bfseries\color{ink}{{ basic.name }}}{% if basic.title %}\hspace{0.8em}{\Large\color{accent}{{ basic.title }}}{% endif %}\par{\small {% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.7em}|\hspace{0.7em}{% endif %}{{ contact.value }}{% endfor %}}\end{center}
+{% else %}
+{\Huge\bfseries\color{ink}{{ basic.name }}}{% if basic.title %}\hspace{0.8em}{\Large\color{accent}{{ basic.title }}}{% endif %}\par\vspace{0.16em}{\small {% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.7em}|\hspace{0.7em}{% endif %}{{ contact.value }}{% endfor %}}\par
+{% endif %}
 {% if basic.summary %}\vspace{0.25em}{\small\justifying {{ basic.summary }}}\par{% endif %}
 
 {% if education %}\rgSection{教育}{% for e in education %}\rgSimpleEntry{ {{ e.school }} · {{ e.degree }} {{ e.major }} }{ {{ e.date }} }

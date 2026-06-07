@@ -1,0 +1,12 @@
+{
+  "id": "word-minimal-01",
+  "name": "word-minimal-01",
+  "displayName": "Word Minimal 极简复刻 LaTeX",
+  "group": "LaTeX 模板",
+  "tags": ["极简", "照片", "Word复刻", "ATS友好", "中文友好"],
+  "engineType": "latex",
+  "kind": "latex",
+  "recommendedCompiler": "xelatex",
+  "source": "Original LaTeX recreation of the app's former minimal Word style",
+  "license": "Original implementation"
+}

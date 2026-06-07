@@ -1,6 +1,6 @@
 # LaTeX 简历工坊
 
-LaTeX 简历工坊是一个独立打包的 macOS 桌面简历生成器，支持 **Word/DOCX 模板** 与 **LaTeX 模板** 两套工作流：既可以套用真实 `.docx` 简历模板导出可编辑 Word，也可以选择 LaTeX 模板导出 `.tex`，在检测到本机 LaTeX 编译器后进一步编译 PDF。
+LaTeX 简历工坊是一个独立打包的 macOS 桌面简历生成器，专注 **LaTeX 简历模板**：可结构化填写简历、可视化微调照片/主题/字号/间距，导出 `.tex`，并在检测到本机 LaTeX 编译器后进一步编译 PDF。
 
 > 即使电脑没有安装 LaTeX 编译器，应用也不会崩溃；LaTeX 模板仍可正常生成 `.tex` 源文件，并给出清晰的编译器缺失提示。
 
@@ -37,13 +37,14 @@ xattr -cr /Applications/LaTeX\ 简历工坊.app
 
 ## 功能特性
 
-- **DOCX 模板套用**：保留原始 Word 模板样式，导出完整可编辑 `.docx` 文件。
-- **LaTeX 模板库**：内置 4 套 LaTeX 简历模板，支持导出 `.tex` 源文件。
+- **LaTeX-only 模板库**：内置 12 套 LaTeX 简历模板，包括学术、ATS、侧栏、时间线、创意卡片和原 Word 风格复刻模板。
+- **预览内可视调版**：在预览框内调整照片位置、照片尺寸、主题色、字号、间距和紧凑模式，并自动重编译预览。
+- **照片自动压缩**：上传大图时自动压缩并转为 LaTeX 友好的临时 JPEG，不再因为照片过大阻断使用。
 - **可选 PDF 编译**：检测到 `xelatex` / `latexmk` 等本机 LaTeX 编译器后，可直接编译 PDF。
 - **无编译器降级**：没有 LaTeX 编译器时仍能生成 `.tex`，并提示用户如何后续编译。
-- **所见即所得预览**：DOCX 模板使用 mammoth.js / 系统预览能力展示简历效果。
+- **渲染预览**：使用 LaTeX 编译生成 PDF，再通过系统 QuickLook 转为预览图。
 - **AI 智能提取**：粘贴简历文本后自动解析并填入结构化表单。
-- **模板隔离打包**：打包版会随应用带上 `templates/`、`latex_templates/` 与 Python 渲染工具。
+- **模板隔离打包**：打包版会随应用带上 `latex_templates/` 与 Python 渲染工具，不再打包旧 Word 模板资源。
 - **自动更新入口**：GitHub Release 可作为后续版本更新来源。
 
 ## 系统要求
@@ -57,7 +58,7 @@ xattr -cr /Applications/LaTeX\ 简历工坊.app
 
 **Q: 模板列表为空怎么办？**
 
-A: 打包版会内置模板资源；开发模式会优先读取仓库内 `templates/` 和 `latex_templates/`。也可以在应用右侧模板面板点击“更换”选择自定义 DOCX 模板目录。
+A: 打包版会内置 `latex_templates/`；开发模式会读取仓库内 `latex_templates/`。右侧模板面板的“刷新”会重新扫描 LaTeX 模板。
 
 **Q: 没有 LaTeX 编译器能用吗？**
 
@@ -73,7 +74,7 @@ A: 不会。新版产品名为 **LaTeX 简历工坊**，包名为 `latex-resume-
 npm install
 npm run build
 python3 scripts/validate_latex_render.py
-python3 scripts/validate_fill.py --template "简约单页01" --json
+python3 scripts/validate_latex_preview_image.py
 npm run dist
 ```
 
@@ -89,7 +90,6 @@ npm run dist
 
 - Electron + React + Vite
 - Python 3 渲染工具链
-- mammoth.js / docx-preview
 - LaTeX 模板渲染器
 
 ## License

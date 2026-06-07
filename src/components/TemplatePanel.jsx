@@ -1,15 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layers, FileText, RefreshCw } from 'lucide-react';
 
-const STYLE_GROUPS = [
-  { key: '极简', label: '极简单页', icon: '◻' },
-  { key: '稳重', label: '稳重单页', icon: '◆' },
-  { key: '简约', label: '简约单页', icon: '○' },
-  { key: '活泼', label: '活泼单页', icon: '◇' },
-  { key: '文艺', label: '文艺单页', icon: '♢' },
-  { key: '知页', label: '知页简历', icon: '▣' },
-];
-
 export default function TemplatePanel({
   templateList,
   selectedTemplate,
@@ -20,7 +11,6 @@ export default function TemplatePanel({
   const [configStatus, setConfigStatus] = useState({});
 
   const hasItems = (key) => Array.isArray(resumeData?.[key]) && resumeData[key].length > 0;
-  const needsFullSections = hasItems('projects') || hasItems('research') || hasItems('studentWork');
 
   const getResumeNeeds = () => ([
     { key: 'basic', label: '基本信息', active: Boolean(resumeData?.basicInfo?.name || resumeData?.basicInfo?.phone || resumeData?.basicInfo?.email) },
@@ -44,6 +34,10 @@ export default function TemplatePanel({
     'deedy-two-column': ['basic', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
     'jakes-ats': ['basic', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
     'modern-clean': ['basic', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'word-minimal-01': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'word-steady-01': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'word-literary-01': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'word-zhiyue-02': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
   };
 
   const getCoverageMatch = (template) => {
@@ -63,7 +57,6 @@ export default function TemplatePanel({
     const isLatex = template.kind === 'latex' || template.engineType === 'latex';
     const name = template.name || '';
     const displayName = template.displayName || name;
-    const richDocx = ['知页简历02', '知页简历03', '简约单页26', '稳重单页03'];
     const hasPhoto = Boolean(resumeData?.basicInfo?.photo);
 
     if (isLatex) {
@@ -76,6 +69,10 @@ export default function TemplatePanel({
           'altacv-sidebar': hasPhoto ? '100 分照片首推' : '100 分侧栏推荐',
           'timeline-compact': '100 分紧凑高密度',
           'creative-card': '100 分视觉展示',
+          'word-minimal-01': '100 分极简复刻',
+          'word-steady-01': '100 分稳重复刻',
+          'word-literary-01': '100 分文艺复刻',
+          'word-zhiyue-02': '100 分知页复刻',
         };
         return {
           score: 100,
@@ -90,17 +87,10 @@ export default function TemplatePanel({
       };
     }
 
-    if (richDocx.some(item => displayName.includes(item) || name.includes(item))) {
-      return {
-        score: needsFullSections ? 76 : 86,
-        label: 'DOCX 压缩版',
-        reason: 'DOCX 版适合 Word 投递，但项目和科研信息可能需要合并压缩到经历区。'
-      };
-    }
     return {
-      score: needsFullSections ? 48 : 62,
-      label: needsFullSections ? '信息承载弱' : '可用',
-      reason: needsFullSections ? '该模板区域较少，容易遗漏项目、科研或学生工作信息。' : '适合基础单页简历。'
+      score: 0,
+      label: '已隐藏',
+      reason: '当前版本专做 LaTeX 模板。'
     };
   };
 
@@ -143,44 +133,6 @@ export default function TemplatePanel({
         </span>
       );
     }
-    if (s.engineType === 'spatial') {
-      return (
-        <span 
-          title="🎨 自由精雕模板：支持可视化画布拖拽、AI改写、全局字号颜色间距微调" 
-          style={{ 
-            color: '#3b82f6', 
-            background: 'rgba(59,130,246,0.12)',
-            border: '1px solid rgba(59,130,246,0.3)',
-            borderRadius: '3px',
-            padding: '1px 4px',
-            fontSize: '9px',
-            fontWeight: 700,
-            marginLeft: 'auto'
-          }}
-        >
-          🎨 自由精雕
-        </span>
-      );
-    }
-    if (s.engineType === 'docxtpl') {
-      return (
-        <span 
-          title="📄 智能分页模板：支持多页自动延展，适合内容丰富的简历" 
-          style={{ 
-            color: '#10b981', 
-            background: 'rgba(16,185,129,0.12)',
-            border: '1px solid rgba(16,185,129,0.3)',
-            borderRadius: '3px',
-            padding: '1px 4px',
-            fontSize: '9px',
-            fontWeight: 700,
-            marginLeft: 'auto'
-          }}
-        >
-          📄 智能分页
-        </span>
-      );
-    }
     if (s.hasConfig && !s.fallback) return <span title="YAML 配置已加载" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '10px', marginLeft: 'auto' }}>✓</span>;
     if (s.hasConfig && s.fallback) return <span title="YAML + v2 兜底" style={{ color: '#fb923c', fontSize: '10px', fontWeight: 700, marginLeft: 'auto' }}>○</span>;
     return <span title="v2 填充" style={{ color: '#6b7280', fontSize: '10px', marginLeft: 'auto' }}>—</span>;
@@ -188,13 +140,7 @@ export default function TemplatePanel({
   const grouped = {};
   templateList.forEach(t => {
     let group = '其他';
-    if (t.kind === 'latex' || t.engineType === 'latex') {
-      group = t.group || 'LaTeX 模板';
-    } else {
-      for (const g of STYLE_GROUPS) {
-        if (t.name.startsWith(g.key)) { group = g.label; break; }
-      }
-    }
+    if (t.kind === 'latex' || t.engineType === 'latex') group = t.group || 'LaTeX 模板';
     if (!grouped[group]) grouped[group] = [];
     grouped[group].push(t);
   });
@@ -205,11 +151,7 @@ export default function TemplatePanel({
     .slice(0, 3);
 
   const handleSelectDir = async () => {
-    if (!window.electronAPI) return;
-    const result = await window.electronAPI.selectTemplateDir();
-    if (result.success && onReloadTemplates) {
-      onReloadTemplates();
-    }
+    if (onReloadTemplates) onReloadTemplates();
   };
 
   return (
@@ -220,15 +162,15 @@ export default function TemplatePanel({
         justifyContent: 'space-between', background: 'rgba(0,0,0,0.1)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Layers size={16} style={{ color: 'var(--color-accent)' }} /> 选择模板 ({templateList.length})
+          <Layers size={16} style={{ color: 'var(--color-accent)' }} /> LaTeX 模板 ({templateList.length})
         </div>
-        <button onClick={handleSelectDir} title="选择模板文件夹" style={{
+        <button onClick={handleSelectDir} title="刷新 LaTeX 模板" style={{
           background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
           borderRadius: '4px', padding: '3px 8px', cursor: 'pointer',
           color: 'var(--color-text-muted)', fontSize: '11px', display: 'flex',
           alignItems: 'center', gap: '4px'
         }}>
-          <RefreshCw size={11} /> 更换
+          <RefreshCw size={11} /> 刷新
         </button>
       </div>
 
@@ -243,13 +185,13 @@ export default function TemplatePanel({
             color: 'var(--color-text-muted)', fontSize: '13px', textAlign: 'center', padding: '20px'
           }}>
             <FileText size={32} style={{ opacity: 0.4 }} />
-            <div>未找到模板文件</div>
+            <div>未找到 LaTeX 模板</div>
             <button onClick={handleSelectDir} style={{
               padding: '8px 16px', background: 'rgba(59,130,246,0.15)',
               border: '1px solid rgba(59,130,246,0.3)', borderRadius: '6px',
               color: '#93c5fd', cursor: 'pointer', fontSize: '12px', fontWeight: 600
             }}>
-              选择模板文件夹
+              刷新模板
             </button>
           </div>
         ) : (

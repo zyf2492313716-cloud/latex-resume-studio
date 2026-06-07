@@ -1,0 +1,38 @@
+\documentclass[10pt,a4paper]{ctexart}
+{% include "_partials/common_macros.tex.j2" %}
+\geometry{left=1.55cm,right=1.55cm,top=1.35cm,bottom=1.35cm}
+\definecolor{accent}{HTML}{ {{ visual.accent }} }
+\definecolor{ink}{HTML}{111827}
+\definecolor{muted}{HTML}{4B5563}
+\renewcommand{\rgSection}[1]{\vspace{ {{ '%.2f'|format(0.52 * visual.spacingScale) }}em}{\large\bfseries\color{accent}#1}\par\vspace{0.12em}{\color{accent}\rule{\linewidth}{0.75pt}}\vspace{ {{ '%.2f'|format(0.30 * visual.spacingScale) }}em}}
+
+\begin{document}
+{% set photo_w = '%.2fcm'|format(2.05 * visual.photoScale) %}
+{% set photo_h = '%.2fcm'|format(2.45 * visual.photoScale) %}
+{% set show_photo = basic.hasPhoto and visual.showPhoto and visual.photoPosition != 'none' %}
+\begin{tabularx}{\linewidth}{@{}X r@{}}
+{\Huge\bfseries\color{ink}{{ basic.name }}} & {% if show_photo and visual.photoPosition in ['right', 'top'] %}\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.55pt}{% endif %}\\
+{% if basic.title %}{\Large\color{accent}{{ basic.title }}}{% endif %} & \\
+\end{tabularx}
+{% if show_photo and visual.photoPosition == 'left' %}\vspace{-1.4em}\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.55pt}\par\vspace{0.25em}{% endif %}
+{\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.8em}|\hspace{0.8em}{% endif %}{{ contact.label }}：{{ contact.value }}{% endfor %}}\par
+{% if basic.summary %}\vspace{0.45em}{\small\justifying {{ basic.summary }}}\par{% endif %}
+
+{% if education %}\rgSection{教育背景}{% for e in education %}\rgEntry{ {{ e.school }} }{ {{ e.date }} }{ {{ e.degree }}{% if e.degree and e.major %}\hspace{0.5em}|\hspace{0.5em}{% endif %}{{ e.major }} }{}
+{% if e.bullets %}\begin{rgBullets}{% for bullet in e.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+{% if experience %}\rgSection{工作经历}{% for e in experience %}\rgEntry{ {{ e.company }} }{ {{ e.date }} }{ {{ e.role }} }{}
+{% if e.bullets %}\begin{rgBullets}{% for bullet in e.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+{% if projects %}\rgSection{项目经历}{% for p in projects %}\rgEntry{ {{ p.name }} }{ {{ p.date }} }{ {{ p.role }} }{}
+{% if p.bullets %}\begin{rgBullets}{% for bullet in p.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+{% if research %}\rgSection{科研经历}{% for r in research %}\rgEntry{ {{ r.name }} }{ {{ r.date }} }{ {{ r.role }} }{}
+{% if r.bullets %}\begin{rgBullets}{% for bullet in r.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+{% if studentWork %}\rgSection{学生工作}{% for s in studentWork %}\rgEntry{ {{ s.organization }} }{ {{ s.date }} }{ {{ s.role }} }{}
+{% if s.bullets %}\begin{rgBullets}{% for bullet in s.bullets %}\item {{ bullet }}
+{% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
+{% if skills or honors %}\rgSection{技能与荣誉}{% if skills %}{\bfseries 技能：}{% for skill in skills %}{{ skill }}{% if not loop.last %}；{% endif %}{% endfor %}\par{% endif %}
+{% if honors %}{\bfseries 荣誉：}{% for item in honors %}{{ item }}{% if not loop.last %}；{% endif %}{% endfor %}\par{% endif %}{% endif %}
+\end{document}

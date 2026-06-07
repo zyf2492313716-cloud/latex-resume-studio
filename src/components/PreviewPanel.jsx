@@ -45,8 +45,36 @@ export default function PreviewPanel({
   const isSpatial = engineType === 'spatial';
   const [latexCompilerStatus, setLatexCompilerStatus] = useState(null);
   const [showLatexEditor, setShowLatexEditor] = useState(false);
+  const [showLatexSourceMode, setShowLatexSourceMode] = useState(false);
   const [latexDraftSource, setLatexDraftSource] = useState('');
   const [latexEditCompiling, setLatexEditCompiling] = useState(false);
+  const latexVisual = {
+    accentColor: '#2563EB',
+    fontScale: 1,
+    spacingScale: 1,
+    photoScale: 1,
+    photoPosition: 'right',
+    photoShape: 'rounded',
+    showPhoto: true,
+    compactMode: false,
+    ...(layoutAdjustments || {})
+  };
+
+  const updateLatexVisual = (patch) => {
+    setManualLatexPreview(false);
+    setLayoutAdjustments(prev => ({ ...(prev || {}), ...patch }));
+  };
+
+  const updateBasicFromPreview = (field, value) => {
+    setManualLatexPreview(false);
+    setResumeData(prev => ({
+      ...prev,
+      basicInfo: {
+        ...(prev.basicInfo || {}),
+        [field]: value
+      }
+    }));
+  };
 
   // Automatically trigger backend re-rendering when adjustments change in spatial mode
   useEffect(() => {
@@ -359,7 +387,7 @@ export default function PreviewPanel({
       }
       const dataToExport = isDesensitized ? getDesensitizedData(resumeData) : resumeData;
       onNotification({ type: 'info', message: '正在使用 LaTeX 编译 PDF...' });
-      window.electronAPI.exportLatexPdf(selectedTemplate.name, dataToExport);
+      window.electronAPI.exportLatexPdf(selectedTemplate.name, dataToExport, layoutAdjustments);
       return;
     }
 
@@ -413,7 +441,7 @@ export default function PreviewPanel({
     }
     const dataToExport = isDesensitized ? getDesensitizedData(resumeData) : resumeData;
     onNotification({ type: 'info', message: '正在生成 LaTeX 源文件...' });
-    window.electronAPI.exportLatexTex(selectedTemplate.name, dataToExport);
+    window.electronAPI.exportLatexTex(selectedTemplate.name, dataToExport, layoutAdjustments);
   };
 
   const handleApplyLatexSourcePreview = async () => {
@@ -580,6 +608,61 @@ export default function PreviewPanel({
         </div>
       )}
 
+      {isLatex && (
+        <div className="print-hide" style={{
+          width: '100%', maxWidth: '850px', marginTop: '10px',
+          background: 'rgba(15,23,42,0.72)', border: '1px solid rgba(148,163,184,0.16)',
+          borderRadius: '12px', padding: '12px 14px', display: 'grid',
+          gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px', alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+            <div style={{ fontSize: '11px', color: '#c4b5fd', fontWeight: 850 }}>预览可视调版</div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <select value={latexVisual.photoPosition} onChange={(e) => updateLatexVisual({ photoPosition: e.target.value })} style={{ background: '#0f172a', color: '#e5e7eb', border: '1px solid rgba(148,163,184,0.24)', borderRadius: '7px', padding: '6px 8px', fontSize: '11px' }}>
+                <option value="right">照片右上</option>
+                <option value="left">照片左上</option>
+                <option value="top">照片居中</option>
+                <option value="none">隐藏照片</option>
+              </select>
+              <select value={latexVisual.photoShape} onChange={(e) => updateLatexVisual({ photoShape: e.target.value })} style={{ background: '#0f172a', color: '#e5e7eb', border: '1px solid rgba(148,163,184,0.24)', borderRadius: '7px', padding: '6px 8px', fontSize: '11px' }}>
+                <option value="rounded">卡片边框</option>
+                <option value="circle">圆形头像感</option>
+                <option value="square">证件照方框</option>
+              </select>
+              <button onClick={() => updateLatexVisual({ showPhoto: !latexVisual.showPhoto })} style={{ background: latexVisual.showPhoto ? 'rgba(20,184,166,0.16)' : 'rgba(255,255,255,0.05)', color: latexVisual.showPhoto ? '#5eead4' : '#cbd5e1', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '7px', padding: '6px 8px', fontSize: '11px', cursor: 'pointer' }}>
+                {latexVisual.showPhoto ? '显示照片' : '照片已隐藏'}
+              </button>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            <label style={{ fontSize: '11px', color: '#94a3b8', display: 'grid', gridTemplateColumns: '58px 1fr 34px', gap: '8px', alignItems: 'center' }}>
+              <span>照片</span>
+              <input type="range" min="0.72" max="1.35" step="0.03" value={latexVisual.photoScale} onChange={(e) => updateLatexVisual({ photoScale: parseFloat(e.target.value) })} />
+              <span>{Math.round(latexVisual.photoScale * 100)}%</span>
+            </label>
+            <label style={{ fontSize: '11px', color: '#94a3b8', display: 'grid', gridTemplateColumns: '58px 1fr 34px', gap: '8px', alignItems: 'center' }}>
+              <span>字号</span>
+              <input type="range" min="0.92" max="1.12" step="0.01" value={latexVisual.fontScale} onChange={(e) => updateLatexVisual({ fontScale: parseFloat(e.target.value) })} />
+              <span>{Math.round(latexVisual.fontScale * 100)}%</span>
+            </label>
+          </div>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            <label style={{ fontSize: '11px', color: '#94a3b8', display: 'grid', gridTemplateColumns: '58px 1fr 34px', gap: '8px', alignItems: 'center' }}>
+              <span>间距</span>
+              <input type="range" min="0.82" max="1.25" step="0.02" value={latexVisual.spacingScale} onChange={(e) => updateLatexVisual({ spacingScale: parseFloat(e.target.value) })} />
+              <span>{Math.round(latexVisual.spacingScale * 100)}%</span>
+            </label>
+            <label style={{ fontSize: '11px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>主题</span>
+              <input type="color" value={latexVisual.accentColor} onChange={(e) => updateLatexVisual({ accentColor: e.target.value })} style={{ width: '34px', height: '24px', border: 'none', background: 'transparent', cursor: 'pointer' }} />
+              <button onClick={() => updateLatexVisual({ compactMode: !latexVisual.compactMode })} style={{ marginLeft: 'auto', background: latexVisual.compactMode ? 'rgba(59,130,246,0.18)' : 'rgba(255,255,255,0.05)', color: latexVisual.compactMode ? '#93c5fd' : '#cbd5e1', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '7px', padding: '5px 8px', fontSize: '11px', cursor: 'pointer' }}>
+                {latexVisual.compactMode ? '紧凑已开' : '紧凑模式'}
+              </button>
+            </label>
+          </div>
+        </div>
+      )}
+
       {/* Advanced Layout Customization Toolbar (Only visible for absolute layout spatial templates) */}
       {isSpatial && (
         <div className="print-hide" style={{
@@ -681,13 +764,19 @@ export default function PreviewPanel({
                       恢复自动预览
                     </button>
                   )}
+                  <button onClick={() => setShowLatexSourceMode(!showLatexSourceMode)} disabled={latexEditCompiling} style={{
+                    padding: '7px 10px', borderRadius: '6px', border: '1px solid rgba(148,163,184,0.25)',
+                    background: showLatexSourceMode ? 'rgba(99,102,241,0.24)' : 'rgba(255,255,255,0.06)', color: showLatexSourceMode ? '#c4b5fd' : '#cbd5e1', cursor: latexEditCompiling ? 'wait' : 'pointer', fontSize: '11px', fontWeight: 700
+                  }}>
+                    {showLatexSourceMode ? '可视快改' : '源码高级'}
+                  </button>
                   <button onClick={() => setShowLatexEditor(false)} disabled={latexEditCompiling} style={{
                     padding: '7px 10px', borderRadius: '6px', border: '1px solid rgba(148,163,184,0.25)',
                     background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', cursor: latexEditCompiling ? 'wait' : 'pointer', fontSize: '11px', fontWeight: 700
                   }}>
                     收起
                   </button>
-                  <button onClick={handleApplyLatexSourcePreview} disabled={latexEditCompiling || !latexDraftSource.trim()} style={{
+                  {showLatexSourceMode && <button onClick={handleApplyLatexSourcePreview} disabled={latexEditCompiling || !latexDraftSource.trim()} style={{
                     padding: '7px 12px', borderRadius: '6px', border: 'none',
                     background: latexEditCompiling ? 'rgba(20,184,166,0.35)' : 'linear-gradient(135deg, #14b8a6, #0f766e)',
                     color: '#fff', cursor: latexEditCompiling ? 'wait' : 'pointer', fontSize: '11px', fontWeight: 800,
@@ -695,29 +784,120 @@ export default function PreviewPanel({
                   }}>
                     {latexEditCompiling && <Loader size={12} className="animate-spin" />}
                     应用并刷新预览
-                  </button>
+                  </button>}
                 </div>
               </div>
-              <textarea
-                value={latexDraftSource}
-                onChange={(event) => setLatexDraftSource(event.target.value)}
-                spellCheck={false}
-                placeholder="等待当前 LaTeX 模板生成源码后即可编辑..."
-                style={{
-                  flex: 1, width: '100%', resize: 'none', boxSizing: 'border-box',
-                  background: 'rgba(2,6,23,0.98)', color: '#dbeafe', border: 'none',
-                  padding: '14px 16px', fontFamily: 'SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                  fontSize: '11px', lineHeight: 1.58, outline: 'none'
-                }}
-              />
+              {showLatexSourceMode ? (
+                <textarea
+                  value={latexDraftSource}
+                  onChange={(event) => setLatexDraftSource(event.target.value)}
+                  spellCheck={false}
+                  placeholder="等待当前 LaTeX 模板生成源码后即可编辑..."
+                  style={{
+                    flex: 1, width: '100%', resize: 'none', boxSizing: 'border-box',
+                    background: 'rgba(2,6,23,0.98)', color: '#dbeafe', border: 'none',
+                    padding: '14px 16px', fontFamily: 'SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    fontSize: '11px', lineHeight: 1.58, outline: 'none'
+                  }}
+                />
+              ) : (
+                <div style={{
+                  flex: 1, padding: '16px', display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: '12px',
+                  background: 'linear-gradient(180deg, rgba(2,6,23,0.96), rgba(15,23,42,0.98))', overflow: 'auto'
+                }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '11px', fontWeight: 800 }}>
+                      姓名
+                      <input value={resumeData?.basicInfo?.name || ''} onChange={(e) => updateBasicFromPreview('name', e.target.value)} style={{ background: '#020617', color: '#f8fafc', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '8px', padding: '10px 11px', outline: 'none' }} />
+                    </label>
+                    <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '11px', fontWeight: 800 }}>
+                      求职意向
+                      <input value={resumeData?.basicInfo?.title || ''} onChange={(e) => updateBasicFromPreview('title', e.target.value)} style={{ background: '#020617', color: '#f8fafc', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '8px', padding: '10px 11px', outline: 'none' }} />
+                    </label>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '11px', fontWeight: 800 }}>
+                      电话
+                      <input value={resumeData?.basicInfo?.phone || ''} onChange={(e) => updateBasicFromPreview('phone', e.target.value)} style={{ background: '#020617', color: '#f8fafc', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '8px', padding: '10px 11px', outline: 'none' }} />
+                    </label>
+                    <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '11px', fontWeight: 800 }}>
+                      邮箱
+                      <input value={resumeData?.basicInfo?.email || ''} onChange={(e) => updateBasicFromPreview('email', e.target.value)} style={{ background: '#020617', color: '#f8fafc', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '8px', padding: '10px 11px', outline: 'none' }} />
+                    </label>
+                  </div>
+                  <div style={{
+                    border: '1px solid rgba(20,184,166,0.20)', borderRadius: '12px', padding: '12px',
+                    background: 'rgba(15,23,42,0.78)', display: 'grid', gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                      <div>
+                        <div style={{ color: '#5eead4', fontSize: '11px', fontWeight: 900 }}>版式调节</div>
+                        <div style={{ color: '#94a3b8', fontSize: '10px', marginTop: '2px' }}>这些控件会同步到 LaTeX 模板参数并重编译预览。</div>
+                      </div>
+                      <button onClick={() => updateLatexVisual({ accentColor: '#2563EB', fontScale: 1, spacingScale: 1, photoScale: 1, photoPosition: 'right', photoShape: 'rounded', showPhoto: true, compactMode: false })} style={{ background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '7px', padding: '6px 8px', fontSize: '11px', cursor: 'pointer' }}>
+                        重置
+                      </button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                      <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '11px', fontWeight: 800 }}>
+                        照片位置
+                        <select value={latexVisual.photoPosition} onChange={(e) => updateLatexVisual({ photoPosition: e.target.value })} style={{ background: '#020617', color: '#f8fafc', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '8px', padding: '9px 10px', outline: 'none' }}>
+                          <option value="right">右上</option>
+                          <option value="left">左上</option>
+                          <option value="top">居中</option>
+                          <option value="none">隐藏</option>
+                        </select>
+                      </label>
+                      <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '11px', fontWeight: 800 }}>
+                        照片样式
+                        <select value={latexVisual.photoShape} onChange={(e) => updateLatexVisual({ photoShape: e.target.value })} style={{ background: '#020617', color: '#f8fafc', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '8px', padding: '9px 10px', outline: 'none' }}>
+                          <option value="rounded">卡片边框</option>
+                          <option value="circle">圆形头像感</option>
+                          <option value="square">证件照方框</option>
+                        </select>
+                      </label>
+                      <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '11px', fontWeight: 800 }}>
+                        主题色
+                        <input type="color" value={latexVisual.accentColor} onChange={(e) => updateLatexVisual({ accentColor: e.target.value })} style={{ width: '100%', height: '38px', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '8px', background: '#020617', cursor: 'pointer' }} />
+                      </label>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                      <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontSize: '11px' }}>
+                        <span>照片 {Math.round(latexVisual.photoScale * 100)}%</span>
+                        <input type="range" min="0.72" max="1.35" step="0.03" value={latexVisual.photoScale} onChange={(e) => updateLatexVisual({ photoScale: parseFloat(e.target.value) })} />
+                      </label>
+                      <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontSize: '11px' }}>
+                        <span>字号 {Math.round(latexVisual.fontScale * 100)}%</span>
+                        <input type="range" min="0.92" max="1.12" step="0.01" value={latexVisual.fontScale} onChange={(e) => updateLatexVisual({ fontScale: parseFloat(e.target.value) })} />
+                      </label>
+                      <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontSize: '11px' }}>
+                        <span>间距 {Math.round(latexVisual.spacingScale * 100)}%</span>
+                        <input type="range" min="0.82" max="1.25" step="0.02" value={latexVisual.spacingScale} onChange={(e) => updateLatexVisual({ spacingScale: parseFloat(e.target.value) })} />
+                      </label>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button onClick={() => updateLatexVisual({ showPhoto: !latexVisual.showPhoto })} style={{ background: latexVisual.showPhoto ? 'rgba(20,184,166,0.16)' : 'rgba(255,255,255,0.05)', color: latexVisual.showPhoto ? '#5eead4' : '#cbd5e1', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '7px', padding: '7px 10px', fontSize: '11px', cursor: 'pointer' }}>
+                        {latexVisual.showPhoto ? '显示照片' : '照片已隐藏'}
+                      </button>
+                      <button onClick={() => updateLatexVisual({ compactMode: !latexVisual.compactMode })} style={{ background: latexVisual.compactMode ? 'rgba(59,130,246,0.18)' : 'rgba(255,255,255,0.05)', color: latexVisual.compactMode ? '#93c5fd' : '#cbd5e1', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '7px', padding: '7px 10px', fontSize: '11px', cursor: 'pointer' }}>
+                        {latexVisual.compactMode ? '紧凑已开' : '紧凑模式'}
+                      </button>
+                    </div>
+                  </div>
+                  <label style={{ display: 'grid', gridTemplateRows: 'auto 1fr', gap: '6px', color: '#cbd5e1', fontSize: '11px', fontWeight: 800 }}>
+                    个人总结
+                    <textarea value={resumeData?.basicInfo?.summary || ''} onChange={(e) => updateBasicFromPreview('summary', e.target.value)} style={{ minHeight: '180px', resize: 'vertical', background: '#020617', color: '#f8fafc', border: '1px solid rgba(148,163,184,0.22)', borderRadius: '8px', padding: '11px', outline: 'none', lineHeight: 1.6 }} />
+                  </label>
+                </div>
+              )}
               <div style={{
                 padding: '8px 14px', borderTop: '1px solid rgba(148,163,184,0.16)',
                 color: manualLatexPreview ? '#5eead4' : '#94a3b8', fontSize: '11px', lineHeight: 1.45,
                 background: 'rgba(15,23,42,0.92)'
               }}>
                 {manualLatexPreview
-                  ? '当前为手动 LaTeX 预览模式；左侧表单不会覆盖这次修改，除非恢复自动预览。'
-                  : '这是源码级可视化预览编辑：在预览页内修改，应用后在同一个预览框看到编译结果。'}
+                  ? '当前为手动 LaTeX 源码模式；左侧表单不会覆盖这次源码修改，除非恢复自动预览。'
+                  : '可视快改会写回结构化简历数据，并自动重新生成 LaTeX 源码与 PDF 预览；源码高级模式适合精修命令。'}
               </div>
             </div>
           )}

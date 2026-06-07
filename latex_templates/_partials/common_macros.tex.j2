@@ -14,6 +14,7 @@
 \setlength{\parskip}{0pt}
 \pagestyle{empty}
 \hypersetup{pdfauthor={{ basic.name }}, pdftitle={{ basic.name }} Resume}
+\linespread{ {{ '%.3f'|format(visual.fontScale) }} }
 
 {% raw %}
 \newcommand{\rgSection}[1]{
@@ -54,5 +55,12 @@
 \newcommand{\rgMuted}[1]{{\color{gray}#1}}
 \newcommand{\rgPhotoPlaceholder}[3]{%
   \fcolorbox{#1}{#2}{\parbox[c][2.8cm][c]{2.45cm}{\centering\small\bfseries #3}}%
+}
+\newcommand{\rgPhotoFrame}[5]{%
+  \begingroup
+  \setlength{\fboxsep}{0pt}%
+  \setlength{\fboxrule}{#5}%
+  \fcolorbox{#1}{white}{\includegraphics[width=#3,height=#4,keepaspectratio]{#2}}%
+  \endgroup
 }
 {% endraw %}
