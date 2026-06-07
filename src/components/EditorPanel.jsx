@@ -104,7 +104,46 @@ export default function EditorPanel({ resumeData, setResumeData, onNotification,
     setResumeData(prev => ({ ...prev, basicInfo: { ...prev.basicInfo, [field]: val } }));
   };
 
-  const handlePhotoSelected = (event) => {
+  const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result || '');
+    reader.onerror = () => reject(reader.error || new Error('图片读取失败'));
+    reader.readAsDataURL(file);
+  });
+
+  const loadImage = (src) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('图片解析失败'));
+    img.src = src;
+  });
+
+  const compressPhotoFile = async (file) => {
+    const source = await readFileAsDataUrl(file);
+    const img = await loadImage(source);
+    const maxWidth = 900;
+    const maxHeight = 1200;
+    const scale = Math.min(1, maxWidth / img.width, maxHeight / img.height);
+    const width = Math.max(1, Math.round(img.width * scale));
+    const height = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(img, 0, 0, width, height);
+
+    let quality = 0.86;
+    let dataUrl = canvas.toDataURL('image/jpeg', quality);
+    while (dataUrl.length > 900 * 1024 && quality > 0.58) {
+      quality -= 0.08;
+      dataUrl = canvas.toDataURL('image/jpeg', quality);
+    }
+    return { dataUrl, width, height };
+  };
+
+  const handlePhotoSelected = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -112,23 +151,18 @@ export default function EditorPanel({ resumeData, setResumeData, onNotification,
       event.target.value = '';
       return;
     }
-    if (file.size > 12 * 1024 * 1024) {
-      onNotification({ type: 'warning', message: '头像图片过大，请选择 12MB 以内的图片' });
-      event.target.value = '';
-      return;
-    }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      handleBasicChange('photo', reader.result || '');
-      onNotification({ type: 'success', message: '头像已上传，预览将自动替换模板默认照片' });
+    try {
+      onNotification({ type: 'info', message: '正在自动压缩头像...' });
+      const { dataUrl, width, height } = await compressPhotoFile(file);
+      handleBasicChange('photo', dataUrl);
+      const kb = Math.max(1, Math.round((dataUrl.length * 3 / 4) / 1024));
+      onNotification({ type: 'success', message: `头像已自动压缩为 ${width}×${height}、约 ${kb}KB，并将替换模板默认照片` });
       event.target.value = '';
-    };
-    reader.onerror = () => {
-      onNotification({ type: 'warning', message: '头像读取失败，请重试' });
+    } catch (err) {
+      onNotification({ type: 'warning', message: `头像处理失败，请换一张常见格式图片：${err.message}` });
       event.target.value = '';
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const removePhoto = () => {

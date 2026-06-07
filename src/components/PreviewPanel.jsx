@@ -493,7 +493,7 @@ export default function PreviewPanel({
                 borderRadius: '6px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
                 fontSize: '12px'
               }}>
-                <FileText size={14} /> 编辑 LaTeX
+                <FileText size={14} /> 预览内编辑
               </button>
             </>
           ) : (
@@ -580,59 +580,6 @@ export default function PreviewPanel({
         </div>
       )}
 
-      {isLatex && showLatexEditor && (
-        <div className="print-hide" style={{
-          width: '100%', maxWidth: '850px', marginTop: '10px',
-          background: 'rgba(15,23,42,0.86)', border: '1px solid rgba(148,163,184,0.22)',
-          borderRadius: '12px', padding: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.25)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '8px' }}>
-            <div>
-              <div style={{ color: '#f8fafc', fontSize: '12px', fontWeight: 800 }}>LaTeX 源码编辑</div>
-              <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '3px', lineHeight: 1.5 }}>
-                这里修改的是当前生成的 .tex 副本；应用后会重新编译并更新右侧 PDF 图片预览。表单变化不会覆盖手动模式，除非恢复自动预览。
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-              {manualLatexPreview && (
-                <button onClick={handleRestoreAutoLatexPreview} disabled={latexEditCompiling} style={{
-                  padding: '7px 10px', borderRadius: '6px', border: '1px solid rgba(148,163,184,0.25)',
-                  background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', cursor: 'pointer', fontSize: '11px', fontWeight: 700
-                }}>
-                  恢复自动预览
-                </button>
-              )}
-              <button onClick={handleApplyLatexSourcePreview} disabled={latexEditCompiling || !latexDraftSource.trim()} style={{
-                padding: '7px 12px', borderRadius: '6px', border: 'none',
-                background: latexEditCompiling ? 'rgba(20,184,166,0.35)' : 'linear-gradient(135deg, #14b8a6, #0f766e)',
-                color: '#fff', cursor: latexEditCompiling ? 'wait' : 'pointer', fontSize: '11px', fontWeight: 800,
-                display: 'flex', alignItems: 'center', gap: '6px'
-              }}>
-                {latexEditCompiling && <Loader size={12} className="animate-spin" />}
-                应用并重新预览
-              </button>
-            </div>
-          </div>
-          <textarea
-            value={latexDraftSource}
-            onChange={(event) => setLatexDraftSource(event.target.value)}
-            spellCheck={false}
-            placeholder="等待当前 LaTeX 模板生成源码后即可编辑..."
-            style={{
-              width: '100%', minHeight: '240px', resize: 'vertical', boxSizing: 'border-box',
-              background: '#020617', color: '#dbeafe', border: '1px solid rgba(148,163,184,0.20)',
-              borderRadius: '8px', padding: '10px', fontFamily: 'SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-              fontSize: '11px', lineHeight: 1.55, outline: 'none'
-            }}
-          />
-          {manualLatexPreview && (
-            <div style={{ marginTop: '8px', color: '#5eead4', fontSize: '11px' }}>
-              当前为手动 LaTeX 预览模式。若继续改左侧表单，请点击“恢复自动预览”。
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Advanced Layout Customization Toolbar (Only visible for absolute layout spatial templates) */}
       {isSpatial && (
         <div className="print-hide" style={{
@@ -704,6 +651,73 @@ export default function PreviewPanel({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280' }}>
                 <Loader size={20} className="animate-spin" />
                 <span>{isLatex ? '正在生成 LaTeX 预览...' : '正在渲染真实 Word 图片预览...'}</span>
+              </div>
+            </div>
+          )}
+          {isLatex && showLatexEditor && (
+            <div className="print-hide" style={{
+              position: 'absolute', inset: '18px', zIndex: 20,
+              display: 'flex', flexDirection: 'column', borderRadius: '12px', overflow: 'hidden',
+              background: 'rgba(15,23,42,0.96)', border: '1px solid rgba(20,184,166,0.35)',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.42)'
+            }}>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center',
+                padding: '12px 14px', borderBottom: '1px solid rgba(148,163,184,0.18)',
+                background: 'linear-gradient(135deg, rgba(20,184,166,0.18), rgba(59,130,246,0.10))'
+              }}>
+                <div>
+                  <div style={{ color: '#f8fafc', fontSize: '13px', fontWeight: 850 }}>预览框内 LaTeX 编辑</div>
+                  <div style={{ color: '#a7f3d0', fontSize: '11px', marginTop: '3px', lineHeight: 1.45 }}>
+                    修改当前预览对应的 .tex 副本；应用后立即重编译并刷新这张 PDF 预览图。
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                  {manualLatexPreview && (
+                    <button onClick={handleRestoreAutoLatexPreview} disabled={latexEditCompiling} style={{
+                      padding: '7px 10px', borderRadius: '6px', border: '1px solid rgba(148,163,184,0.25)',
+                      background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', cursor: latexEditCompiling ? 'wait' : 'pointer', fontSize: '11px', fontWeight: 700
+                    }}>
+                      恢复自动预览
+                    </button>
+                  )}
+                  <button onClick={() => setShowLatexEditor(false)} disabled={latexEditCompiling} style={{
+                    padding: '7px 10px', borderRadius: '6px', border: '1px solid rgba(148,163,184,0.25)',
+                    background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', cursor: latexEditCompiling ? 'wait' : 'pointer', fontSize: '11px', fontWeight: 700
+                  }}>
+                    收起
+                  </button>
+                  <button onClick={handleApplyLatexSourcePreview} disabled={latexEditCompiling || !latexDraftSource.trim()} style={{
+                    padding: '7px 12px', borderRadius: '6px', border: 'none',
+                    background: latexEditCompiling ? 'rgba(20,184,166,0.35)' : 'linear-gradient(135deg, #14b8a6, #0f766e)',
+                    color: '#fff', cursor: latexEditCompiling ? 'wait' : 'pointer', fontSize: '11px', fontWeight: 800,
+                    display: 'flex', alignItems: 'center', gap: '6px'
+                  }}>
+                    {latexEditCompiling && <Loader size={12} className="animate-spin" />}
+                    应用并刷新预览
+                  </button>
+                </div>
+              </div>
+              <textarea
+                value={latexDraftSource}
+                onChange={(event) => setLatexDraftSource(event.target.value)}
+                spellCheck={false}
+                placeholder="等待当前 LaTeX 模板生成源码后即可编辑..."
+                style={{
+                  flex: 1, width: '100%', resize: 'none', boxSizing: 'border-box',
+                  background: 'rgba(2,6,23,0.98)', color: '#dbeafe', border: 'none',
+                  padding: '14px 16px', fontFamily: 'SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                  fontSize: '11px', lineHeight: 1.58, outline: 'none'
+                }}
+              />
+              <div style={{
+                padding: '8px 14px', borderTop: '1px solid rgba(148,163,184,0.16)',
+                color: manualLatexPreview ? '#5eead4' : '#94a3b8', fontSize: '11px', lineHeight: 1.45,
+                background: 'rgba(15,23,42,0.92)'
+              }}>
+                {manualLatexPreview
+                  ? '当前为手动 LaTeX 预览模式；左侧表单不会覆盖这次修改，除非恢复自动预览。'
+                  : '这是源码级可视化预览编辑：在预览页内修改，应用后在同一个预览框看到编译结果。'}
               </div>
             </div>
           )}

@@ -22,6 +22,43 @@ export default function TemplatePanel({
   const hasItems = (key) => Array.isArray(resumeData?.[key]) && resumeData[key].length > 0;
   const needsFullSections = hasItems('projects') || hasItems('research') || hasItems('studentWork');
 
+  const getResumeNeeds = () => ([
+    { key: 'basic', label: '基本信息', active: Boolean(resumeData?.basicInfo?.name || resumeData?.basicInfo?.phone || resumeData?.basicInfo?.email) },
+    { key: 'photo', label: '照片', active: Boolean(resumeData?.basicInfo?.photo) },
+    { key: 'summary', label: '个人总结', active: Boolean(resumeData?.basicInfo?.summary) },
+    { key: 'education', label: '教育', active: hasItems('education') },
+    { key: 'experience', label: '工作', active: hasItems('experience') },
+    { key: 'projects', label: '项目', active: hasItems('projects') },
+    { key: 'research', label: '科研', active: hasItems('research') },
+    { key: 'studentWork', label: '学生工作', active: hasItems('studentWork') },
+    { key: 'skills', label: '技能', active: hasItems('skills') },
+    { key: 'honors', label: '荣誉', active: hasItems('honors') },
+  ].filter(item => item.active));
+
+  const LATEX_CAPABILITIES = {
+    'academic-profile': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'altacv-sidebar': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'timeline-compact': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'creative-card': ['basic', 'photo', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'awesome-accent': ['basic', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'deedy-two-column': ['basic', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'jakes-ats': ['basic', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+    'modern-clean': ['basic', 'summary', 'education', 'experience', 'projects', 'research', 'studentWork', 'skills', 'honors'],
+  };
+
+  const getCoverageMatch = (template) => {
+    const needs = getResumeNeeds();
+    if (!needs.length) return { score: 100, missing: [], covered: [] };
+    const caps = new Set(LATEX_CAPABILITIES[template.name] || []);
+    const covered = needs.filter(item => caps.has(item.key));
+    const missing = needs.filter(item => !caps.has(item.key));
+    return {
+      score: Math.round((covered.length / needs.length) * 100),
+      missing,
+      covered,
+    };
+  };
+
   const getTemplateMatch = (template) => {
     const isLatex = template.kind === 'latex' || template.engineType === 'latex';
     const name = template.name || '';
@@ -29,49 +66,30 @@ export default function TemplatePanel({
     const richDocx = ['知页简历02', '知页简历03', '简约单页26', '稳重单页03'];
     const hasPhoto = Boolean(resumeData?.basicInfo?.photo);
 
-    if (isLatex && name === 'academic-profile') {
+    if (isLatex) {
+      const coverage = getCoverageMatch(template);
+      const missingText = coverage.missing.map(item => item.label).join('、');
+      const fullReason = `已覆盖当前填写的 ${coverage.covered.length} 个核心板块：${coverage.covered.map(item => item.label).join('、')}。`;
+      if (coverage.score === 100) {
+        const labelMap = {
+          'academic-profile': '100 分科研首推',
+          'altacv-sidebar': hasPhoto ? '100 分照片首推' : '100 分侧栏推荐',
+          'timeline-compact': '100 分紧凑高密度',
+          'creative-card': '100 分视觉展示',
+        };
+        return {
+          score: 100,
+          label: labelMap[name] || '100 分完整匹配',
+          reason: fullReason
+        };
+      }
       return {
-        score: 99,
-        label: '科研首推',
-        reason: '科研、项目、实践和荣誉分区完整，适合医学/公共卫生/学术型简历。'
-      };
-    }
-    if (isLatex && name === 'altacv-sidebar') {
-      return {
-        score: hasPhoto ? 98 : 94,
-        label: hasPhoto ? '照片首推' : '侧栏推荐',
-        reason: '侧栏预留头像和联系方式，主栏承载完整经历，适合需要照片的中文简历。'
-      };
-    }
-    if (isLatex && name === 'timeline-compact') {
-      return {
-        score: needsFullSections ? 94 : 90,
-        label: '紧凑高密度',
-        reason: '按时间线压缩展示所有板块，适合内容很多但希望控制页数的版本。'
-      };
-    }
-    if (isLatex && name === 'creative-card') {
-      return {
-        score: hasPhoto ? 92 : 88,
-        label: '视觉展示',
-        reason: '名片式头图和双栏收束，适合作品集、社团或展示型投递。'
+        score: coverage.score,
+        label: '部分匹配',
+        reason: `已覆盖 ${coverage.covered.length}/${coverage.covered.length + coverage.missing.length} 个当前板块；缺少：${missingText || '无'}。`
       };
     }
 
-    if (isLatex && ['jakes-ats', 'modern-clean'].includes(name)) {
-      return {
-        score: 98,
-        label: '完整推荐',
-        reason: '覆盖教育、工作、项目、科研、学生工作、荣誉和技能，适合这份信息量较大的简历。'
-      };
-    }
-    if (isLatex) {
-      return {
-        score: needsFullSections ? 90 : 82,
-        label: '高匹配',
-        reason: 'LaTeX 模板支持完整结构化模块，适合导出 .tex 或编译 PDF。'
-      };
-    }
     if (richDocx.some(item => displayName.includes(item) || name.includes(item))) {
       return {
         score: needsFullSections ? 76 : 86,

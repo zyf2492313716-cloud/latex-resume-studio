@@ -8,30 +8,26 @@
 \renewcommand{\rgSection}[1]{\vspace{0.55em}{\large\bfseries\color{accent}#1}\par\vspace{0.18em}{\color{accent}\rule{\linewidth}{0.8pt}}\vspace{0.28em}}
 
 \begin{document}
-\begin{minipage}[t]{0.29\linewidth}
-\colorbox{sidebg}{\parbox[t][0.965\textheight][t]{0.94\linewidth}{\vspace{0.65em}\centering
+\setlength{\fboxsep}{0.7em}
+\noindent\colorbox{sidebg}{\parbox{0.965\linewidth}{
+\begin{tabularx}{\linewidth}{@{}p{2.65cm} X@{}}
+\centering
 {% if basic.hasPhoto %}
-\includegraphics[width=2.55cm,height=3.1cm,keepaspectratio]{ {{- basic.photoPath -}} }\par
+\includegraphics[width=2.35cm,height=2.85cm,keepaspectratio]{ {{- basic.photoPath -}} }
 {% else %}
-\rgPhotoPlaceholder{accent}{white}{ {{ basic.name }} }\par
+\rgPhotoPlaceholder{accent}{white}{ {{ basic.name }} }
 {% endif %}
-\vspace{0.65em}
-{\LARGE\bfseries\color{ink}{{ basic.name }}}\par
-{% if basic.title %}\vspace{0.18em}{\small\color{accent}{{ basic.title }}}\par{% endif %}
-\vspace{0.7em}
-\raggedright\small
-{% for contact in basic.contacts %}\textbf{ {{ contact.label }} }\par {{ contact.value }}\par\vspace{0.45em}
-{% endfor %}
-{% if skills %}\vspace{0.25em}{\bfseries\color{accent}技能}\par\vspace{0.25em}
-{% for skill in skills %}\fcolorbox{accent}{white}{\scriptsize {{ skill }}}\hspace{0.25em}\vspace{0.35em}
-{% endfor %}{% endif %}
-{% if honors %}\vspace{0.55em}{\bfseries\color{accent}荣誉}\par
-\begin{rgBullets}
-{% for item in honors %}\item {\scriptsize {{ item }} }
-{% endfor %}\end{rgBullets}{% endif %}
+&
+\raggedright
+{\Huge\bfseries\color{ink}{{ basic.name }}}\par
+{% if basic.title %}\vspace{0.2em}{\Large\color{accent}{{ basic.title }}}\par{% endif %}
+\vspace{0.45em}{\small\color{muted}{% for contact in basic.contacts %}{% if not loop.first %}\hspace{0.8em}|\hspace{0.8em}{% endif %}{{ contact.label }}：{{ contact.value }}{% endfor %}}\par
+{% if skills %}\vspace{0.55em}{\bfseries\color{accent}技能}\quad {% for skill in skills %}\fcolorbox{accent}{white}{\scriptsize {{ skill }}}\hspace{0.25em}{% endfor %}{% endif %}
+\\
+\end{tabularx}
 }}
-\end{minipage}\hfill
-\begin{minipage}[t]{0.67\linewidth}
+\vspace{0.35em}
+
 {% if basic.summary %}
 \rgSection{个人概要}
 {\small\justifying {{ basic.summary }}}\par
@@ -76,5 +72,10 @@
 {% for bullet in s.bullets %}\item {{ bullet }}
 {% endfor %}\end{rgBullets}{% endif %}
 {% endfor %}{% endif %}
-\end{minipage}
+{% if honors %}
+\rgSection{荣誉奖项}
+\begin{rgBullets}
+{% for item in honors %}\item {{ item }}
+{% endfor %}\end{rgBullets}
+{% endif %}
 \end{document}
