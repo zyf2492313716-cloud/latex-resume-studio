@@ -11,19 +11,40 @@
 {% set photo_w = '%.2fcm'|format(2.05 * visual.photoScale) %}
 {% set photo_h = '%.2fcm'|format(2.45 * visual.photoScale) %}
 {% set show_photo = basic.hasPhoto and visual.showPhoto and visual.photoPosition != 'none' %}
-\begin{minipage}[t]{0.32\linewidth}
-\colorbox{side}{\parbox{0.90\linewidth}{\vspace{0.75em}\centering
-{% if show_photo %}\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.7pt}\par\vspace{0.5em}{% endif %}
-{\LARGE\bfseries\color{ink}{{ basic.name }}}\par
-{% if basic.title %}\vspace{0.15em}{\color{accent}{{ basic.title }}}\par{% endif %}
-\vspace{0.35em}{\color{sideLine}\rule{0.70\linewidth}{0.7pt}}\par
-\vspace{0.55em}{\small {% for contact in basic.contacts %}{{ contact.label }}：{{ contact.value }}{% if not loop.last %}\par{}{% endif %}{% endfor %}}
-{% if skills %}\vspace{0.60em}{\bfseries\color{accent}技能}\par{% for skill in skills %}{\small {{ skill }}}\par{}\vspace{0.08em}{% endfor %}{% endif %}
-{% if honors %}\vspace{0.60em}{\bfseries\color{accent}荣誉}\par{% for item in honors %}{\scriptsize {{ item }}}\par{}\vspace{0.12em}{% endfor %}{% endif %}
-\vspace{0.7em}}}
-\end{minipage}\hfill
-\begin{minipage}[t]{0.64\linewidth}
-{% if basic.summary %}\rgSection{个人概要}{\small\justifying {{ basic.summary }}}\par{% endif %}
+\setlength{\fboxsep}{0.72em}
+\noindent\colorbox{side}{\parbox{0.965\linewidth}{
+{% if show_photo and visual.photoPosition == 'left' %}
+\begin{tabularx}{\linewidth}{@{}p{ {{ photo_w }} } X@{}}
+\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.7pt} &
+{\LARGE\bfseries\color{ink}{{ basic.name }}}\par{}
+{% if basic.title %}{\color{accent}{{ basic.title }}}\par{}{% endif %}
+\vspace{0.28em}{\color{sideLine}\rule{0.42\linewidth}{0.7pt}}\par{}
+{\small {% for contact in basic.contacts %}{{ contact.label }}：{{ contact.value }}{% if not loop.last %}\hspace{0.85em}{\color{sideLine}|}\hspace{0.85em}{% endif %}{% endfor %}}
+\end{tabularx}
+{% elif show_photo and visual.photoPosition == 'top' %}
+\centering\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.7pt}\par\vspace{0.45em}
+{\LARGE\bfseries\color{ink}{{ basic.name }}}\par{}
+{% if basic.title %}{\color{accent}{{ basic.title }}}\par{}{% endif %}
+\vspace{0.28em}{\color{sideLine}\rule{0.42\linewidth}{0.7pt}}\par{}
+{\small {% for contact in basic.contacts %}{{ contact.label }}：{{ contact.value }}{% if not loop.last %}\hspace{0.85em}{\color{sideLine}|}\hspace{0.85em}{% endif %}{% endfor %}}
+{% elif show_photo %}
+\begin{tabularx}{\linewidth}{@{}X p{ {{ photo_w }} }@{}}
+{\LARGE\bfseries\color{ink}{{ basic.name }}}\par{}
+{% if basic.title %}{\color{accent}{{ basic.title }}}\par{}{% endif %}
+\vspace{0.28em}{\color{sideLine}\rule{0.42\linewidth}{0.7pt}}\par{}
+{\small {% for contact in basic.contacts %}{{ contact.label }}：{{ contact.value }}{% if not loop.last %}\hspace{0.85em}{\color{sideLine}|}\hspace{0.85em}{% endif %}{% endfor %}} &
+\raggedleft\rgPhotoFrame{accent}{ {{- basic.photoPath -}} }{ {{ photo_w }} }{ {{ photo_h }} }{0.7pt}
+\end{tabularx}
+{% else %}
+{\LARGE\bfseries\color{ink}{{ basic.name }}}\par{}
+{% if basic.title %}{\color{accent}{{ basic.title }}}\par{}{% endif %}
+\vspace{0.28em}{\color{sideLine}\rule{0.42\linewidth}{0.7pt}}\par{}
+{\small {% for contact in basic.contacts %}{{ contact.label }}：{{ contact.value }}{% if not loop.last %}\hspace{0.85em}{\color{sideLine}|}\hspace{0.85em}{% endif %}{% endfor %}}
+{% endif %}
+}}
+\vspace{0.50em}
+
+{% if basic.summary %}\rgSection{个人概要}\small\justifying {{ basic.summary }}\par{% endif %}
 {% if education %}\rgSection{教育背景}{% for e in education %}\rgEntry{ {{ e.school }} }{ {{ e.date }} }{ {{ e.degree }} {{ e.major }} }{}
 {% if e.bullets %}\begin{rgBullets}{% for bullet in e.bullets %}\item {{ bullet }}
 {% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
@@ -39,5 +60,8 @@
 {% if studentWork %}\rgSection{学生工作}{% for s in studentWork %}\rgEntry{ {{ s.organization }} }{ {{ s.date }} }{ {{ s.role }} }{}
 {% if s.bullets %}\begin{rgBullets}{% for bullet in s.bullets %}\item {{ bullet }}
 {% endfor %}\end{rgBullets}{% endif %}{% endfor %}{% endif %}
-\end{minipage}
+{% if skills or honors %}\rgSection{技能与荣誉}
+{% if skills %}{\bfseries\color{accent}技能}\par{% for skill in skills %}{\small {{ skill }}}{% if not loop.last %}\hspace{0.70em}{\color{sideLine}|}\hspace{0.70em}{% endif %}{% endfor %}\par{}\vspace{0.18em}{% endif %}
+{% if honors %}{\bfseries\color{accent}荣誉}\par{% for item in honors %}{\small {{ item }}}{% if not loop.last %}\par{}\vspace{0.10em}{% endif %}{% endfor %}{% endif %}
+{% endif %}
 \end{document}

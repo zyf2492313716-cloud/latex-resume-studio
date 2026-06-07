@@ -2,6 +2,7 @@
 """Validate that LaTeX templates compile to PDF and macOS can thumbnail them."""
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -69,6 +70,20 @@ def make_thumbnail(pdf_path: Path, output_dir: Path) -> bool:
     return proc.returncode == 0 and any(output_dir.glob("*.png"))
 
 
+def first_page_has_text(pdf_path: Path) -> bool:
+    pdftotext = shutil.which("pdftotext")
+    if not pdftotext:
+        return True
+    proc = subprocess.run(
+        [pdftotext, "-f", "1", "-l", "1", str(pdf_path), "-"],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    return bool(proc.stdout.replace("\f", "").strip())
+
+
 def main() -> int:
     work_dir = Path(tempfile.mkdtemp(prefix="latex_preview_image_"))
     try:
@@ -84,15 +99,17 @@ def main() -> int:
             pdf_path = Path(result.get("pdfPath") or "")
             compiled = bool(result.get("compiled") and pdf_path.exists())
             thumb_ok = compiled and make_thumbnail(pdf_path, thumb_dir)
+            first_page_ok = compiled and first_page_has_text(pdf_path)
             validations.append({
                 "templateId": template_id,
                 "compiled": compiled,
                 "pdfPath": str(pdf_path) if compiled else None,
                 "thumbnail": thumb_ok,
+                "firstPageHasText": first_page_ok,
                 "error": result.get("compileError") or result.get("error") or "",
             })
 
-        ok = all(item["compiled"] and item["thumbnail"] for item in validations)
+        ok = all(item["compiled"] and item["thumbnail"] and item["firstPageHasText"] for item in validations)
         print(json.dumps({
             "success": ok,
             "fixture": str(fixture),
@@ -102,7 +119,7 @@ def main() -> int:
         }, ensure_ascii=False, indent=2))
         return 0 if ok else 1
     finally:
-        if "RESUME_DEBUG_PREVIEW" not in __import__("os").environ:
+        if "RESUME_DEBUG_PREVIEW" not in os.environ:
             shutil.rmtree(work_dir, ignore_errors=True)
 
 
