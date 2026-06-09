@@ -20,6 +20,10 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+LOCAL_LIBS = Path(__file__).resolve().parent / "libs"
+if LOCAL_LIBS.exists():
+    sys.path.insert(0, str(LOCAL_LIBS))
+
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 SUPPORTED_COMPILERS = ("tectonic", "xelatex", "lualatex", "latexmk")
