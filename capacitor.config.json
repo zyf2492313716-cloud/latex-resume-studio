@@ -1,0 +1,8 @@
+{
+  "appId": "com.zyf.latexresumestudio",
+  "appName": "LaTeX Resume Studio",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

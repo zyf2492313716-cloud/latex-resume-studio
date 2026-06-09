@@ -1,0 +1,88 @@
+name: Windows Build Verification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - 'electron-main.cjs'
+      - 'preload.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/**'
+      - 'scripts/**'
+      - 'latex_templates/**'
+      - '.github/workflows/windows-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-build:
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Windows Python dependencies
+        run: npm run install-python-deps
+
+      - name: Verify embedded Python libs are Windows-compatible
+        shell: pwsh
+        run: |
+          $bad = Get-ChildItem -Path src/utils/libs -Recurse -File | Where-Object { $_.Name -match '\.(dylib|so)$' -or $_.Name -match 'darwin' }
+          if ($bad) {
+            $bad | ForEach-Object { Write-Error "Unexpected non-Windows Python artifact: $($_.FullName)" }
+            exit 1
+          }
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Validate LaTeX source rendering
+        run: py -3 scripts/validate_latex_render.py --template word-blue-sidebar-01
+
+      - name: Package Windows ZIP
+        run: npm run dist:win
+
+      - name: Verify Windows package resources
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist-desktop -Filter '*win*.zip' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $zip) { throw 'Windows ZIP was not generated' }
+          if (-not (Test-Path dist-desktop/win-unpacked/resources/app.asar)) { throw 'Missing app.asar' }
+          if (-not (Test-Path dist-desktop/win-unpacked/resources/latex_templates)) { throw 'Missing latex_templates resources' }
+          if (-not (Test-Path dist-desktop/win-unpacked/resources/utils)) { throw 'Missing utils resources' }
+          $bad = Get-ChildItem -Path dist-desktop/win-unpacked/resources/utils/libs -Recurse -File | Where-Object { $_.Name -match '\.(dylib|so)$' -or $_.Name -match 'darwin' }
+          if ($bad) {
+            $bad | ForEach-Object { Write-Error "Unexpected non-Windows artifact in package: $($_.FullName)" }
+            exit 1
+          }
+          Write-Host "Verified $($zip.Name)"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: latex-resume-studio-windows-x64
+          path: |
+            dist-desktop/*win*.zip
+            dist-desktop/latest.yml
+          if-no-files-found: error

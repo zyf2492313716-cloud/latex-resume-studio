@@ -7,6 +7,7 @@ import TemplatePanel from './components/TemplatePanel';
 import UpdateNotification from './components/UpdateNotification';
 import ApiConfigModal from './components/ApiConfigModal';
 import { DEFAULT_RESUME_DATA } from './utils/aiParser';
+import { getWebLatexTemplates, renderLatexSourceWeb } from './utils/webLatexFallback';
 
 export default function App() {
   const [resumeData, setResumeData] = useState(DEFAULT_RESUME_DATA);
@@ -14,6 +15,7 @@ export default function App() {
   const [templateList, setTemplateList] = useState([]);
   const [previewDocxBase64, setPreviewDocxBase64] = useState('');
   const [previewImageBase64, setPreviewImageBase64] = useState('');
+  const [previewPdfBase64, setPreviewPdfBase64] = useState('');
   const [previewTexSource, setPreviewTexSource] = useState('');
   const [previewMessage, setPreviewMessage] = useState('');
   const [manualLatexPreview, setManualLatexPreview] = useState(false);
@@ -54,6 +56,12 @@ export default function App() {
           setSelectedTemplate(list[0]);
         }
       });
+    } else {
+      const list = getWebLatexTemplates();
+      setTemplateList(list);
+      if (list.length > 0 && !selectedTemplate) {
+        setSelectedTemplate(list[0]);
+      }
     }
   }, [selectedTemplate]);
 
@@ -62,12 +70,25 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!selectedTemplate || !window.electronAPI) {
-      setTemplateEngineType('yaml');
+    if (!selectedTemplate) {
+      setTemplateEngineType('latex');
       setPreviewDocxBase64('');
       setPreviewImageBase64('');
+      setPreviewPdfBase64('');
       setPreviewTexSource('');
       setPreviewMessage('');
+      return;
+    }
+
+    if (!window.electronAPI) {
+      setTemplateEngineType('latex');
+      setPreviewDocxBase64('');
+      setPreviewImageBase64('');
+      setPreviewPdfBase64('');
+      setPreviewTexSource('');
+      setPreviewMessage('移动/Web 预览模式：可生成 .tex 源码；PDF 编译请在桌面版或 Overleaf 中完成。');
+      setLayoutAdjustments({});
+      setManualLatexPreview(false);
       return;
     }
 
@@ -78,6 +99,7 @@ export default function App() {
     setTemplateEngineType(immediateEngineType);
     setPreviewDocxBase64('');
     setPreviewImageBase64('');
+    setPreviewPdfBase64('');
     setPreviewTexSource('');
     setPreviewMessage('');
     setLayoutAdjustments({});
@@ -96,15 +118,39 @@ export default function App() {
   }, [selectedTemplate?.name, selectedTemplate?.path, selectedTemplate?.engineType, selectedTemplate?.kind]);
 
   useEffect(() => {
-    if (!selectedTemplate || !window.electronAPI || manualLatexPreview) {
+    if (!selectedTemplate || manualLatexPreview) {
       if (manualLatexPreview) return;
       previewRequestIdRef.current += 1;
       setPreviewDocxBase64('');
       setPreviewImageBase64('');
+      setPreviewPdfBase64('');
       setPreviewTexSource('');
       setPreviewMessage('');
       setPreviewLoading(false);
       return;
+    }
+
+    if (!window.electronAPI) {
+      if (previewTimerRef.current) {
+        clearTimeout(previewTimerRef.current);
+      }
+      const requestId = previewRequestIdRef.current + 1;
+      previewRequestIdRef.current = requestId;
+      previewTimerRef.current = setTimeout(() => {
+        if (requestId !== previewRequestIdRef.current) return;
+        const rawData = JSON.parse(JSON.stringify(resumeData));
+        const dataForWeb = isDesensitized ? getDesensitizedData(rawData) : rawData;
+        const texSource = renderLatexSourceWeb(dataForWeb, selectedTemplate, layoutAdjustments);
+        setPreviewDocxBase64('');
+        setPreviewImageBase64('');
+        setPreviewPdfBase64('');
+        setPreviewTexSource(texSource);
+        setPreviewMessage('移动/Web 预览模式：已生成 LaTeX 源码，可下载 .tex；PDF 编译在桌面版执行。');
+        setPreviewLoading(false);
+      }, 300);
+      return () => {
+        if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+      };
     }
 
     if (previewTimerRef.current) {
@@ -123,6 +169,7 @@ export default function App() {
           if (result.success) {
             setPreviewDocxBase64(result.docxBase64 || '');
             setPreviewImageBase64(result.previewImageBase64 || '');
+            setPreviewPdfBase64(result.previewPdfBase64 || '');
             setPreviewTexSource(result.texSource || '');
             setPreviewMessage(result.message || '');
           } else {
@@ -183,10 +230,12 @@ export default function App() {
       <PreviewPanel
         previewDocxBase64={previewDocxBase64}
         previewImageBase64={previewImageBase64}
+        previewPdfBase64={previewPdfBase64}
         previewTexSource={previewTexSource}
         previewMessage={previewMessage}
         setPreviewMessage={setPreviewMessage}
         setPreviewImageBase64={setPreviewImageBase64}
+        setPreviewPdfBase64={setPreviewPdfBase64}
         setPreviewTexSource={setPreviewTexSource}
         manualLatexPreview={manualLatexPreview}
         setManualLatexPreview={setManualLatexPreview}

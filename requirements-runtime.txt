@@ -1,0 +1,3 @@
+# Python dependencies embedded in desktop packages for the LaTeX-only runtime.
+jinja2>=3.1.0
+pillow>=10.0.0

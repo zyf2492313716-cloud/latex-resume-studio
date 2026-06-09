@@ -43,6 +43,17 @@ function saveConfig(cfg) {
 
 let mainWindow = null;
 
+function getPythonCommand() {
+  if (process.env.RESUME_PYTHON) return { command: process.env.RESUME_PYTHON, args: [] };
+  if (process.platform === 'win32') return { command: 'python', args: [] };
+  return { command: 'python3', args: [] };
+}
+
+function withPythonArgs(args) {
+  const python = getPythonCommand();
+  return { command: python.command, args: [...python.args, ...args] };
+}
+
 function scanLatexTemplates() {
   try {
     if (!LATEX_TEMPLATES_DIR || !fs.existsSync(LATEX_TEMPLATES_DIR)) return [];
@@ -169,7 +180,8 @@ async function runLatexRenderer(args, options = {}) {
   };
 
   try {
-    const { stdout, stderr } = await execFileAsync('python3', [LATEX_RENDERER_SCRIPT, ...args], runOptions);
+    const py = withPythonArgs([LATEX_RENDERER_SCRIPT, ...args]);
+    const { stdout, stderr } = await execFileAsync(py.command, py.args, runOptions);
     const payload = parseJsonPayload(stdout) || { success: false, error: 'LaTeX renderer stdout is not JSON', stdout };
     if (stderr) payload.stderr = stderr;
     return payload;
@@ -356,6 +368,16 @@ async function renderFileQuickLookPreview(filePath, size = '1600') {
     return null;
   } finally {
     try { fs.rmSync(outDir, { recursive: true, force: true }); } catch (e) {}
+  }
+}
+
+function readPdfBase64(pdfPath) {
+  if (!pdfPath || !fs.existsSync(pdfPath)) return '';
+  try {
+    return fs.readFileSync(pdfPath).toString('base64');
+  } catch (err) {
+    console.error('Read PDF preview fallback error:', err.message);
+    return '';
   }
 }
 
@@ -607,6 +629,7 @@ ipcMain.handle('render-preview', async (event, { templateName, resumeData, layou
         };
       }
       const previewImageBase64 = await renderFileQuickLookPreview(result.pdfPath, '1600');
+      const previewPdfBase64 = previewImageBase64 ? '' : readPdfBase64(result.pdfPath);
       return {
         success: true,
         engineType: 'latex',
@@ -616,7 +639,10 @@ ipcMain.handle('render-preview', async (event, { templateName, resumeData, layou
         compiled: true,
         compiler: result.compiler,
         previewImageBase64,
-        message: previewImageBase64 ? '' : 'PDF 已生成，但系统图片预览转换失败；可导出 .tex 或编译 PDF。'
+        previewPdfBase64,
+        message: previewImageBase64
+          ? ''
+          : (previewPdfBase64 ? 'PDF 已生成，当前平台使用内嵌 PDF 预览。' : 'PDF 已生成，但系统图片预览转换失败；可导出 .tex 或编译 PDF。')
       };
     } catch (err) {
       return { success: false, engineType: 'latex', error: 'LaTeX 预览失败: ' + err.message };
@@ -676,16 +702,20 @@ ipcMain.handle('render-latex-source-preview', async (event, { source, name, resu
       };
     }
     const previewImageBase64 = await renderFileQuickLookPreview(result.pdfPath, '1600');
+    const previewPdfBase64 = previewImageBase64 ? '' : readPdfBase64(result.pdfPath);
     return {
-      success: Boolean(previewImageBase64),
+      success: Boolean(previewImageBase64 || previewPdfBase64),
       engineType: 'latex',
       texSource: texSource || String(source),
       compiled: true,
       compiler: result.compiler,
       previewImageBase64,
+      previewPdfBase64,
       pdfPath: result.pdfPath,
-      error: previewImageBase64 ? '' : 'PDF 已生成，但系统图片预览转换失败',
-      message: previewImageBase64 ? '已根据手动修改重新生成 LaTeX 预览。' : 'PDF 已生成，但系统图片预览转换失败。'
+      error: previewImageBase64 || previewPdfBase64 ? '' : 'PDF 已生成，但系统图片预览转换失败',
+      message: previewImageBase64
+        ? '已根据手动修改重新生成 LaTeX 预览。'
+        : (previewPdfBase64 ? '已根据手动修改重新生成 PDF 预览。' : 'PDF 已生成，但系统图片预览转换失败。')
     };
   } catch (err) {
     return { success: false, engineType: 'latex', error: '手动 LaTeX 源码预览失败: ' + err.message, texSource: String(source) };

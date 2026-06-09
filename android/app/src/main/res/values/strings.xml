@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">LaTeX Resume Studio</string>
+    <string name="title_activity_main">LaTeX Resume Studio</string>
+    <string name="package_name">com.zyf.latexresumestudio</string>
+    <string name="custom_url_scheme">com.zyf.latexresumestudio</string>
+</resources>

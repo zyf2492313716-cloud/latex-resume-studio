@@ -2,16 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { Printer, FileText, Loader, Eye, EyeOff, Palette, Type, Space, Camera, Sparkles } from 'lucide-react';
 import { renderAsync } from 'docx-preview';
 import { polishText, suggestLatexAdjustments } from '../utils/aiParser';
+import { downloadTextFile } from '../utils/webLatexFallback';
 import SnapshotModal from './SnapshotModal';
 import InteractiveCanvas from './InteractiveCanvas';
 
 export default function PreviewPanel({
   previewDocxBase64,
   previewImageBase64,
+  previewPdfBase64,
   previewTexSource,
   previewMessage,
   setPreviewMessage,
   setPreviewImageBase64,
+  setPreviewPdfBase64,
   setPreviewTexSource,
   manualLatexPreview,
   setManualLatexPreview,
@@ -41,6 +44,7 @@ export default function PreviewPanel({
 
   const docxContainerRef = React.useRef(null);
   const docxRenderRequestRef = React.useRef(0);
+  const hasElectronApi = Boolean(window.electronAPI);
   const isLatex = engineType === 'latex' || selectedTemplate?.kind === 'latex' || selectedTemplate?.engineType === 'latex';
   const isSpatial = engineType === 'spatial';
   const [latexCompilerStatus, setLatexCompilerStatus] = useState(null);
@@ -401,8 +405,12 @@ export default function PreviewPanel({
   // or backend LaTeX PDF compilation when a LaTeX template is selected.
   const handlePrint = () => {
     if (isLatex) {
-      if (!window.electronAPI || !selectedTemplate) {
+      if (!selectedTemplate) {
         onNotification({ type: 'warning', message: '请先选择 LaTeX 模板' });
+        return;
+      }
+      if (!window.electronAPI) {
+        onNotification({ type: 'warning', message: '移动/Web 版本暂不内置 LaTeX 编译器；请先导出 .tex 后用桌面版或 Overleaf 编译 PDF。' });
         return;
       }
       if (latexCompilerStatus?.compiler && !latexCompilerStatus.compiler.available) {
@@ -462,8 +470,18 @@ export default function PreviewPanel({
   };
 
   const handleExportLatexTex = () => {
-    if (!window.electronAPI || !selectedTemplate || !isLatex) {
+    if (!selectedTemplate || !isLatex) {
       onNotification({ type: 'warning', message: '请先选择 LaTeX 模板' });
+      return;
+    }
+    if (!window.electronAPI) {
+      if (!previewTexSource?.trim()) {
+        onNotification({ type: 'warning', message: '当前还没有生成 LaTeX 源码，请稍后再试。' });
+        return;
+      }
+      const safeName = `${resumeData?.basicInfo?.name || 'resume'}_${selectedTemplate?.name || 'latex'}`.replace(/[\\/:*?"<>|\s]+/g, '_');
+      downloadTextFile(`${safeName}.tex`, previewTexSource);
+      onNotification({ type: 'success', message: '已在当前设备下载 .tex 源文件' });
       return;
     }
     const dataToExport = isDesensitized ? getDesensitizedData(resumeData) : resumeData;
@@ -472,7 +490,20 @@ export default function PreviewPanel({
   };
 
   const handleApplyLatexSourcePreview = async () => {
-    if (!isLatex || !window.electronAPI?.renderLatexSourcePreview) {
+    if (!isLatex) {
+      onNotification({ type: 'warning', message: '当前模板不是 LaTeX 模板' });
+      return;
+    }
+    if (!window.electronAPI?.renderLatexSourcePreview) {
+      if (latexDraftSource.trim()) {
+        setManualLatexPreview(true);
+        setPreviewTexSource(latexDraftSource);
+        setPreviewImageBase64('');
+        if (setPreviewPdfBase64) setPreviewPdfBase64('');
+        setPreviewMessage('移动/Web 源码编辑已保存；PDF 重编译请在桌面版或 Overleaf 中完成。');
+        onNotification({ type: 'success', message: 'LaTeX 源码修改已保存到当前预览' });
+        return;
+      }
       onNotification({ type: 'warning', message: '当前环境不支持 LaTeX 源码重编译预览' });
       return;
     }
@@ -494,8 +525,14 @@ export default function PreviewPanel({
       setPreviewTexSource(result.texSource || latexDraftSource);
       if (result.success && result.previewImageBase64) {
         setPreviewImageBase64(result.previewImageBase64);
+        if (setPreviewPdfBase64) setPreviewPdfBase64('');
         setPreviewMessage(result.message || '已根据手动修改重新生成 LaTeX 预览。');
         onNotification({ type: 'success', message: 'LaTeX 源码修改已重新编译为预览' });
+      } else if (result.success && result.previewPdfBase64) {
+        setPreviewImageBase64('');
+        if (setPreviewPdfBase64) setPreviewPdfBase64(result.previewPdfBase64);
+        setPreviewMessage(result.message || '已根据手动修改重新生成 PDF 预览。');
+        onNotification({ type: 'success', message: 'LaTeX 源码修改已重新编译为 PDF 预览' });
       } else {
         setPreviewMessage(result.error || result.message || 'LaTeX 源码编译失败，请检查语法。');
         onNotification({ type: 'warning', message: result.error || 'LaTeX 源码编译失败，请检查语法。' });
@@ -631,13 +668,15 @@ export default function PreviewPanel({
       {isLatex && (
         <div className="print-hide" style={{
           width: '100%', maxWidth: '850px', marginTop: '10px',
-          background: latexCompilerStatus?.compiler?.available ? 'rgba(20,184,166,0.10)' : 'rgba(245,158,11,0.10)',
-          border: `1px solid ${latexCompilerStatus?.compiler?.available ? 'rgba(20,184,166,0.25)' : 'rgba(245,158,11,0.25)'}`,
-          color: latexCompilerStatus?.compiler?.available ? '#5eead4' : '#fbbf24',
+          background: !hasElectronApi ? 'rgba(59,130,246,0.10)' : (latexCompilerStatus?.compiler?.available ? 'rgba(20,184,166,0.10)' : 'rgba(245,158,11,0.10)'),
+          border: `1px solid ${!hasElectronApi ? 'rgba(59,130,246,0.25)' : (latexCompilerStatus?.compiler?.available ? 'rgba(20,184,166,0.25)' : 'rgba(245,158,11,0.25)')}`,
+          color: !hasElectronApi ? '#93c5fd' : (latexCompilerStatus?.compiler?.available ? '#5eead4' : '#fbbf24'),
           borderRadius: '10px', padding: '9px 12px', fontSize: '12px', lineHeight: 1.5
         }}>
           <strong>LaTeX 模板：</strong>
-          {latexCompilerStatus?.compiler?.available
+          {!hasElectronApi
+            ? '移动/Web 预览模式已启用：当前可生成并下载 .tex；PDF 编译请使用桌面版或 Overleaf。'
+            : latexCompilerStatus?.compiler?.available
             ? `已检测到 ${latexCompilerStatus.compiler.name}，可编译 PDF；也可导出 .tex 到 Overleaf/本地继续调整。`
             : (latexCompilerStatus?.compiler?.message || '正在检测 LaTeX 编译器；即使没有编译器，也可以先导出 .tex。')}
         </div>
@@ -753,7 +792,7 @@ export default function PreviewPanel({
       )}
 
       {/* Render final filled DOCX image first; fall back by template type only when image conversion is unavailable. */}
-      {previewImageBase64 || !isSpatial ? (
+      {previewImageBase64 || previewPdfBase64 || !isSpatial ? (
         <div className="a4-container" style={{
           width: '794px', minHeight: '1123px',
           background: '#fff', borderRadius: '4px',
@@ -769,6 +808,38 @@ export default function PreviewPanel({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280' }}>
                 <Loader size={20} className="animate-spin" />
                 <span>{isLatex ? '正在生成 LaTeX 预览...' : '正在渲染真实 Word 图片预览...'}</span>
+              </div>
+            </div>
+          )}
+          {!hasElectronApi && isLatex && previewTexSource && !showLatexEditor && !previewImageBase64 && !previewPdfBase64 && (
+            <div style={{
+              padding: '26px 28px', minHeight: '1123px', boxSizing: 'border-box',
+              background: '#f8fafc', color: '#0f172a'
+            }}>
+              <div style={{
+                border: '1px solid #cbd5e1', borderRadius: '12px', overflow: 'hidden',
+                background: '#fff', boxShadow: '0 18px 45px rgba(15,23,42,0.08)'
+              }}>
+                <div style={{
+                  padding: '14px 16px', background: '#0f172a', color: '#e2e8f0',
+                  display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 850 }}>移动/Web LaTeX 源码预览</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>当前阶段生成可下载 .tex；PDF 编译在桌面版或 Overleaf 完成。</div>
+                  </div>
+                  <button onClick={handleExportLatexTex} style={{
+                    padding: '7px 10px', borderRadius: '7px', border: '1px solid rgba(255,255,255,0.18)',
+                    background: 'rgba(255,255,255,0.08)', color: '#f8fafc', fontSize: '11px', fontWeight: 800
+                  }}>
+                    下载 .tex
+                  </button>
+                </div>
+                <pre style={{
+                  margin: 0, padding: '16px', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  fontFamily: 'SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                  fontSize: '10.5px', lineHeight: 1.55, color: '#111827', maxHeight: '1010px', overflow: 'auto'
+                }}>{previewTexSource}</pre>
               </div>
             </div>
           )}
@@ -951,13 +1022,19 @@ export default function PreviewPanel({
                 style={{ width: '100%', height: 'auto', display: 'block', background: '#fff' }}
               />
             </div>
+          ) : previewPdfBase64 ? (
+            <iframe
+              title="LaTeX PDF 预览"
+              src={`data:application/pdf;base64,${previewPdfBase64}`}
+              style={{ width: '100%', minHeight: '1123px', border: 'none', background: '#fff' }}
+            />
           ) : previewDocxBase64 ? (
             <div
               ref={docxContainerRef}
               className="preview-docx-container"
               style={{ padding: '0', width: '100%', minHeight: '1123px' }}
             />
-          ) : (
+          ) : !hasElectronApi && isLatex && previewTexSource ? null : (
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
               justifyContent: 'center', height: '1123px', color: '#9ca3af', gap: '10px'
@@ -966,7 +1043,7 @@ export default function PreviewPanel({
               <div style={{ fontSize: '14px' }}>{isLatex ? 'LaTeX PDF 预览暂未生成' : '请先在左侧编辑简历数据，右侧选择模板'}</div>
               <div style={{ fontSize: '12px', maxWidth: '520px', textAlign: 'center', lineHeight: 1.6 }}>
                 {isLatex
-                  ? (previewMessage || '正在编译 LaTeX 并生成 PDF 图片预览；如果失败，请检查编译器或点击“导出 .tex”查看源码。')
+                  ? (previewMessage || (hasElectronApi ? '正在编译 LaTeX 并生成 PDF 图片预览；如果失败，请检查编译器或点击“导出 .tex”查看源码。' : '移动/Web 版本将生成 .tex 源码预览。'))
                   : '选中模板后将自动生成预览'}
               </div>
             </div>
