@@ -1,3 +1,7 @@
+import { Capacitor } from '@capacitor/core';
+import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+
 const TEMPLATE_GROUPS = {
   'academic-profile': '学术与科研',
   'altacv-sidebar': '照片侧栏',
@@ -123,4 +127,43 @@ export function downloadTextFile(filename, content, mimeType = 'application/x-te
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+export async function saveTextFileMobile(filename, content, mimeType = 'application/x-tex') {
+  if (!Capacitor.isNativePlatform()) {
+    downloadTextFile(filename, content, mimeType);
+    return { native: false, path: filename };
+  }
+
+  const safeName = String(filename || 'resume.tex').replace(/[\\/:*?"<>|]+/g, '_');
+  const path = `latex-resume-studio/${safeName}`;
+  const writeResult = await Filesystem.writeFile({
+    path,
+    data: content,
+    directory: Directory.Documents,
+    encoding: Encoding.UTF8,
+    recursive: true,
+  });
+
+  const uriResult = await Filesystem.getUri({
+    path,
+    directory: Directory.Documents,
+  });
+  const fileUri = uriResult.uri || writeResult.uri;
+
+  try {
+    const canShare = await Share.canShare();
+    if (canShare?.value && fileUri) {
+      await Share.share({
+        title: '导出 LaTeX 简历源码',
+        text: 'LaTeX 简历工坊已生成 .tex 源文件，可发送到文件管理器、网盘或 Overleaf。',
+        files: [fileUri],
+        dialogTitle: '保存或分享 .tex 源文件',
+      });
+    }
+  } catch (err) {
+    console.warn('Native share failed, file was still saved:', err);
+  }
+
+  return { native: true, path, uri: fileUri };
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
-import { Bell, Settings } from 'lucide-react';
+import { Bell, Settings, PenLine, FileText, LayoutTemplate } from 'lucide-react';
 import EditorPanel from './components/EditorPanel';
 import PreviewPanel from './components/PreviewPanel';
 import TemplatePanel from './components/TemplatePanel';
@@ -27,6 +27,8 @@ export default function App() {
   const [layoutAdjustments, setLayoutAdjustments] = useState({});
   const previewTimerRef = React.useRef(null);
   const previewRequestIdRef = React.useRef(0);
+  const isElectronRuntime = Boolean(window.electronAPI);
+  const [mobileView, setMobileView] = useState('edit');
 
   // Deep clone and obfuscate personal data fields for desensitized outputs
   const getDesensitizedData = (data) => {
@@ -200,8 +202,30 @@ export default function App() {
     setTimeout(() => setNotification(null), 4500);
   }, []);
 
+  const mobileTabs = [
+    { key: 'edit', label: '填写', icon: PenLine },
+    { key: 'preview', label: '预览', icon: FileText },
+    { key: 'templates', label: '模板', icon: LayoutTemplate },
+  ];
+
+  const mobilePanelClass = (key) => `mobile-panel ${mobileView === key ? 'mobile-panel-active' : ''}`;
+
   return (
-    <div className="workspace-container">
+    <div className={`workspace-container ${!isElectronRuntime ? 'mobile-runtime' : ''}`}>
+      {!isElectronRuntime && (
+        <div className="mobile-app-shell print-hide">
+          <div>
+            <div className="mobile-app-kicker">LaTeX Resume Studio</div>
+            <div className="mobile-app-title">手机端 .tex 简历生成器</div>
+          </div>
+          <button
+            className="mobile-primary-action"
+            onClick={() => setMobileView('preview')}
+          >
+            生成预览
+          </button>
+        </div>
+      )}
       {notification && (
         <div className="print-hide" style={{
           position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
@@ -219,51 +243,75 @@ export default function App() {
         </div>
       )}
 
-      <EditorPanel
-        resumeData={resumeData}
-        setResumeData={setResumeData}
-        onNotification={showNotification}
-        onOpenApiConfig={() => setShowApiConfig(true)}
-        engineType={templateEngineType}
-      />
+      <div className={mobilePanelClass('edit')}>
+        <EditorPanel
+          resumeData={resumeData}
+          setResumeData={setResumeData}
+          onNotification={showNotification}
+          onOpenApiConfig={() => setShowApiConfig(true)}
+          engineType={templateEngineType}
+        />
+      </div>
 
-      <PreviewPanel
-        previewDocxBase64={previewDocxBase64}
-        previewImageBase64={previewImageBase64}
-        previewPdfBase64={previewPdfBase64}
-        previewTexSource={previewTexSource}
-        previewMessage={previewMessage}
-        setPreviewMessage={setPreviewMessage}
-        setPreviewImageBase64={setPreviewImageBase64}
-        setPreviewPdfBase64={setPreviewPdfBase64}
-        setPreviewTexSource={setPreviewTexSource}
-        manualLatexPreview={manualLatexPreview}
-        setManualLatexPreview={setManualLatexPreview}
-        previewLoading={previewLoading}
-        setPreviewLoading={setPreviewLoading}
-        onNotification={showNotification}
-        selectedTemplate={selectedTemplate}
-        resumeData={resumeData}
-        setResumeData={setResumeData}
-        engineType={templateEngineType}
-        isDesensitized={isDesensitized}
-        setIsDesensitized={setIsDesensitized}
-        layoutAdjustments={layoutAdjustments}
-        setLayoutAdjustments={setLayoutAdjustments}
-      />
+      <div className={mobilePanelClass('preview')}>
+        <PreviewPanel
+          previewDocxBase64={previewDocxBase64}
+          previewImageBase64={previewImageBase64}
+          previewPdfBase64={previewPdfBase64}
+          previewTexSource={previewTexSource}
+          previewMessage={previewMessage}
+          setPreviewMessage={setPreviewMessage}
+          setPreviewImageBase64={setPreviewImageBase64}
+          setPreviewPdfBase64={setPreviewPdfBase64}
+          setPreviewTexSource={setPreviewTexSource}
+          manualLatexPreview={manualLatexPreview}
+          setManualLatexPreview={setManualLatexPreview}
+          previewLoading={previewLoading}
+          setPreviewLoading={setPreviewLoading}
+          onNotification={showNotification}
+          selectedTemplate={selectedTemplate}
+          resumeData={resumeData}
+          setResumeData={setResumeData}
+          engineType={templateEngineType}
+          isDesensitized={isDesensitized}
+          setIsDesensitized={setIsDesensitized}
+          layoutAdjustments={layoutAdjustments}
+          setLayoutAdjustments={setLayoutAdjustments}
+        />
+      </div>
 
-      <TemplatePanel
-        templateList={templateList}
-        selectedTemplate={selectedTemplate}
-        setSelectedTemplate={setSelectedTemplate}
-        onReloadTemplates={loadTemplates}
-        resumeData={resumeData}
-      />
+      <div className={mobilePanelClass('templates')}>
+        <TemplatePanel
+          templateList={templateList}
+          selectedTemplate={selectedTemplate}
+          setSelectedTemplate={(template) => {
+            setSelectedTemplate(template);
+            if (!isElectronRuntime) setMobileView('preview');
+          }}
+          onReloadTemplates={loadTemplates}
+          resumeData={resumeData}
+        />
+      </div>
 
       <UpdateNotification />
 
       {showApiConfig && (
         <ApiConfigModal onClose={() => setShowApiConfig(false)} onNotification={showNotification} />
+      )}
+
+      {!isElectronRuntime && (
+        <nav className="mobile-tabbar print-hide" aria-label="移动端导航">
+          {mobileTabs.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              className={mobileView === key ? 'active' : ''}
+              onClick={() => setMobileView(key)}
+            >
+              <Icon size={18} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </nav>
       )}
 
       <style>{`

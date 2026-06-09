@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Printer, FileText, Loader, Eye, EyeOff, Palette, Type, Space, Camera, Sparkles } from 'lucide-react';
 import { renderAsync } from 'docx-preview';
 import { polishText, suggestLatexAdjustments } from '../utils/aiParser';
-import { downloadTextFile } from '../utils/webLatexFallback';
+import { saveTextFileMobile } from '../utils/webLatexFallback';
 import SnapshotModal from './SnapshotModal';
 import InteractiveCanvas from './InteractiveCanvas';
 
@@ -469,7 +469,7 @@ export default function PreviewPanel({
     window.electronAPI.exportToWord(selectedTemplate.name, dataToExport, layoutAdjustments);
   };
 
-  const handleExportLatexTex = () => {
+  const handleExportLatexTex = async () => {
     if (!selectedTemplate || !isLatex) {
       onNotification({ type: 'warning', message: '请先选择 LaTeX 模板' });
       return;
@@ -480,8 +480,17 @@ export default function PreviewPanel({
         return;
       }
       const safeName = `${resumeData?.basicInfo?.name || 'resume'}_${selectedTemplate?.name || 'latex'}`.replace(/[\\/:*?"<>|\s]+/g, '_');
-      downloadTextFile(`${safeName}.tex`, previewTexSource);
-      onNotification({ type: 'success', message: '已在当前设备下载 .tex 源文件' });
+      try {
+        const result = await saveTextFileMobile(`${safeName}.tex`, previewTexSource);
+        onNotification({
+          type: 'success',
+          message: result.native
+            ? '已保存到 Android 文档目录，并已打开系统分享面板'
+            : '已在当前设备下载 .tex 源文件'
+        });
+      } catch (err) {
+        onNotification({ type: 'warning', message: `保存 .tex 失败：${err.message}` });
+      }
       return;
     }
     const dataToExport = isDesensitized ? getDesensitizedData(resumeData) : resumeData;
