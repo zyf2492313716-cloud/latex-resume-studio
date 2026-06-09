@@ -18,6 +18,11 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 ROOT = Path(__file__).resolve().parents[1]
 RENDERER = ROOT / "src" / "utils" / "latex_renderer.py"
 FIXTURE = ROOT / "fixtures" / "sample_resume.zh.json"
@@ -28,7 +33,16 @@ JINJA_TOKEN_RE = re.compile(
 
 
 def run_json(cmd: List[str]) -> Dict[str, Any]:
-    proc = subprocess.run(cmd, cwd=str(ROOT), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    proc = subprocess.run(
+        cmd,
+        cwd=str(ROOT),
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
     try:
         payload = json.loads(proc.stdout)
     except json.JSONDecodeError:
