@@ -1,0 +1,99 @@
+name: Tectonic Android POC
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-tectonic-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout app repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Setup Android SDK and NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          sdkmanager --install "ndk;27.2.12479018"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Install Linux build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            cmake \
+            git \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libgraphite2-dev \
+            libharfbuzz-dev \
+            libicu-dev \
+            libpng-dev \
+            libssl-dev \
+            ninja-build \
+            pkg-config \
+            zlib1g-dev
+
+      - name: Configure Android linker
+        shell: bash
+        run: |
+          cat >> "$GITHUB_ENV" <<EOF
+          CC_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+          CXX_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++
+          AR_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+          EOF
+
+      - name: Clone Tectonic
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/tectonic-typesetting/tectonic.git /tmp/tectonic
+
+      - name: Build Tectonic CLI for Android ARM64
+        id: tectonic-build
+        shell: bash
+        working-directory: /tmp/tectonic
+        continue-on-error: true
+        env:
+          TECTONIC_DEP_BACKEND: pkg-config
+          PKG_CONFIG_ALLOW_CROSS: '1'
+        run: |
+          cargo build --release --target aarch64-linux-android -p tectonic 2>&1 | tee "$GITHUB_WORKSPACE/tectonic-android-build.log"
+
+      - name: Collect result
+        shell: bash
+        run: |
+          mkdir -p tectonic-android-poc
+          cp tectonic-android-build.log tectonic-android-poc/
+          if [ -f /tmp/tectonic/target/aarch64-linux-android/release/tectonic ]; then
+            cp /tmp/tectonic/target/aarch64-linux-android/release/tectonic tectonic-android-poc/tectonic-aarch64-linux-android
+            file tectonic-android-poc/tectonic-aarch64-linux-android | tee tectonic-android-poc/file.txt
+          else
+            echo "Tectonic Android binary was not produced." | tee tectonic-android-poc/file.txt
+          fi
+
+      - name: Upload POC logs and binary if available
+        uses: actions/upload-artifact@v4
+        with:
+          name: tectonic-android-poc
+          path: tectonic-android-poc/
+          if-no-files-found: error
+
+      - name: Fail when Tectonic Android build failed
+        if: steps.tectonic-build.outcome != 'success'
+        shell: bash
+        run: |
+          echo "Tectonic Android POC failed. See tectonic-android-build.log artifact for details."
+          exit 1
