@@ -35,6 +35,10 @@ jobs:
             clang \
             cmake \
             git \
+            autoconf \
+            autoconf-archive \
+            automake \
+            libtool \
             ninja-build \
             pkg-config \
             curl \
