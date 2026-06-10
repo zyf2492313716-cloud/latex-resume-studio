@@ -158,20 +158,25 @@ jobs:
           npm run build
           npx cap sync android
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
 
       - name: Verify embedded Tectonic APK
         if: steps.tectonic-build.outcome == 'success'
         shell: bash
         run: |
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          TEST_APK="android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
           test -f "$APK"
+          test -f "$TEST_APK"
           unzip -l "$APK" | tee tectonic-android-poc/apk-contents.txt
           unzip -l "$APK" | grep 'assets/tectonic/tectonic-aarch64-linux-android'
           unzip -l "$APK" | grep 'assets/tectonic/tectonic-x86_64-linux-android'
           cp "$APK" tectonic-android-poc/latex-resume-studio-tectonic-android-debug.apk
+          cp "$TEST_APK" tectonic-android-poc/latex-resume-studio-tectonic-androidTest.apk
           shasum -a 256 tectonic-android-poc/latex-resume-studio-tectonic-android-debug.apk \
             | tee tectonic-android-poc/apk.sha256
+          shasum -a 256 tectonic-android-poc/latex-resume-studio-tectonic-androidTest.apk \
+            | tee -a tectonic-android-poc/apk.sha256
 
       - name: Upload POC logs and APK before runtime smoke
         if: always()
@@ -193,7 +198,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
-            set -euxo pipefail
+            set -eux
             adb wait-for-device
             for i in {1..60}; do
               sdk="$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
@@ -208,7 +213,6 @@ jobs:
             test "${sdk:-0}" -ge 24
 
             cd android
-            ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon --stacktrace
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             adb shell pm list packages | grep 'com.zyf.latexresumestudio'
