@@ -75,6 +75,7 @@ jobs:
             freetype:arm64-android \
             'harfbuzz[graphite2]:arm64-android' \
             icu:arm64-android \
+            libiconv:arm64-android \
             libpng:arm64-android \
             zlib:arm64-android
 
@@ -92,6 +93,7 @@ jobs:
           TECTONIC_DEP_BACKEND: vcpkg
           VCPKG_ROOT: /tmp/vcpkg
           VCPKGRS_TRIPLET: arm64-android
+          RUSTFLAGS: -L native=/tmp/vcpkg/installed/arm64-android/lib -l static=iconv
         run: |
           cargo build --release --target aarch64-linux-android -p tectonic 2>&1 | tee "$GITHUB_WORKSPACE/tectonic-android-build.log"
 
