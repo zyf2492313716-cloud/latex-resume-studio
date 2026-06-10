@@ -35,16 +35,12 @@ jobs:
             clang \
             cmake \
             git \
-            libfontconfig1-dev \
-            libfreetype6-dev \
-            libgraphite2-dev \
-            libharfbuzz-dev \
-            libicu-dev \
-            libpng-dev \
-            libssl-dev \
             ninja-build \
             pkg-config \
-            zlib1g-dev
+            curl \
+            zip \
+            unzip \
+            tar
 
       - name: Configure Android linker
         shell: bash
@@ -56,10 +52,40 @@ jobs:
           CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
           EOF
 
+      - name: Setup vcpkg Android triplet
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git /tmp/vcpkg
+          cat > /tmp/vcpkg/triplets/community/arm64-android-tectonic.cmake <<'EOF'
+          set(VCPKG_TARGET_ARCHITECTURE arm64)
+          set(VCPKG_CRT_LINKAGE dynamic)
+          set(VCPKG_LIBRARY_LINKAGE static)
+          set(VCPKG_CMAKE_SYSTEM_NAME Android)
+          set(VCPKG_CMAKE_SYSTEM_VERSION 24)
+          set(VCPKG_MAKE_BUILD_TRIPLET "x64-linux-release")
+          EOF
+          /tmp/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+          cat >> "$GITHUB_ENV" <<EOF
+          VCPKG_ROOT=/tmp/vcpkg
+          VCPKGRS_TRIPLET=arm64-android-tectonic
+          VCPKG_FORCE_SYSTEM_BINARIES=1
+          EOF
+
+      - name: Build Android target dependencies with vcpkg
+        shell: bash
+        run: |
+          /tmp/vcpkg/vcpkg install \
+            fontconfig:arm64-android-tectonic \
+            freetype:arm64-android-tectonic \
+            'harfbuzz[graphite2]:arm64-android-tectonic' \
+            icu:arm64-android-tectonic \
+            libpng:arm64-android-tectonic \
+            zlib:arm64-android-tectonic
+
       - name: Clone Tectonic
         shell: bash
         run: |
-          git clone --depth 1 https://github.com/tectonic-typesetting/tectonic.git /tmp/tectonic
+          git clone --depth 1 --recurse-submodules https://github.com/tectonic-typesetting/tectonic.git /tmp/tectonic
 
       - name: Build Tectonic CLI for Android ARM64
         id: tectonic-build
@@ -67,8 +93,9 @@ jobs:
         working-directory: /tmp/tectonic
         continue-on-error: true
         env:
-          TECTONIC_DEP_BACKEND: pkg-config
-          PKG_CONFIG_ALLOW_CROSS: '1'
+          TECTONIC_DEP_BACKEND: vcpkg
+          VCPKG_ROOT: /tmp/vcpkg
+          VCPKGRS_TRIPLET: arm64-android-tectonic
         run: |
           cargo build --release --target aarch64-linux-android -p tectonic 2>&1 | tee "$GITHUB_WORKSPACE/tectonic-android-build.log"
 
