@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Printer, FileText, Loader, Eye, EyeOff, Palette, Type, Space, Camera, Sparkles } from 'lucide-react';
 import { renderAsync } from 'docx-preview';
 import { polishText, suggestLatexAdjustments } from '../utils/aiParser';
+import { canUseNativeTectonic, getNativeTectonicStatus } from '../utils/mobileTectonic';
 import { saveTextFileMobile } from '../utils/webLatexFallback';
 import SnapshotModal from './SnapshotModal';
 import InteractiveCanvas from './InteractiveCanvas';
@@ -53,6 +54,8 @@ export default function PreviewPanel({
   const [latexDraftSource, setLatexDraftSource] = useState('');
   const [latexEditCompiling, setLatexEditCompiling] = useState(false);
   const [aiLatexAdjusting, setAiLatexAdjusting] = useState(false);
+  const [nativeTectonicChecking, setNativeTectonicChecking] = useState(false);
+  const [nativeTectonicStatus, setNativeTectonicStatus] = useState(null);
   const latexVisual = {
     accentColor: '#2563EB',
     fontScale: 1,
@@ -63,6 +66,36 @@ export default function PreviewPanel({
     showPhoto: true,
     compactMode: false,
     ...(layoutAdjustments || {})
+  };
+
+  const handleCheckNativeTectonic = async () => {
+    if (!canUseNativeTectonic()) {
+      onNotification({ type: 'warning', message: '当前不是 Android 原生环境，无法检测内置 Tectonic。' });
+      return;
+    }
+    if (nativeTectonicChecking) return;
+
+    setNativeTectonicChecking(true);
+    try {
+      const status = await getNativeTectonicStatus();
+      setNativeTectonicStatus(status);
+      if (status.available) {
+        const version = status.stdout || 'Tectonic 已可执行';
+        setPreviewMessage(`Android 内置 Tectonic 健康检查通过：${version}`);
+        onNotification({ type: 'success', message: `Android 内置 Tectonic 可执行：${version}` });
+      } else {
+        const message = status.error || status.stderr || '当前 APK 未内置可执行 Tectonic 引擎。';
+        setPreviewMessage(`Android 内置 Tectonic 暂不可用：${message}`);
+        onNotification({ type: 'warning', message: `Android 内置 Tectonic 暂不可用：${message}` });
+      }
+    } catch (err) {
+      const message = err?.message || String(err);
+      setNativeTectonicStatus({ available: false, error: message });
+      setPreviewMessage(`Android 内置 Tectonic 检测失败：${message}`);
+      onNotification({ type: 'warning', message: `Android 内置 Tectonic 检测失败：${message}` });
+    } finally {
+      setNativeTectonicChecking(false);
+    }
   };
 
   const updateLatexVisual = (patch) => {
@@ -624,6 +657,18 @@ export default function PreviewPanel({
             <Printer size={14} /> {isLatex ? '编译 PDF' : '导出 PDF'}
           </button>
 
+          {isLatex && !hasElectronApi && canUseNativeTectonic() && (
+            <button onClick={handleCheckNativeTectonic} disabled={nativeTectonicChecking} style={{
+              padding: '8px 14px', background: nativeTectonicStatus?.available ? 'linear-gradient(135deg, #22c55e, #15803d)' : 'linear-gradient(135deg, #f59e0b, #b45309)',
+              color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 800,
+              cursor: nativeTectonicChecking ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+              fontSize: '12px', boxShadow: '0 4px 12px rgba(245,158,11,0.22)', opacity: nativeTectonicChecking ? 0.75 : 1
+            }}>
+              {nativeTectonicChecking ? <Loader size={14} className="animate-spin" /> : <FileText size={14} />}
+              检测本机 Tectonic
+            </button>
+          )}
+
           <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
 
           {/* Privacy Desensitization Toggle */}
@@ -684,7 +729,9 @@ export default function PreviewPanel({
         }}>
           <strong>LaTeX 模板：</strong>
           {!hasElectronApi
-            ? '移动/Web 预览模式已启用：当前可生成并下载 .tex；PDF 编译请使用桌面版或 Overleaf。'
+            ? (nativeTectonicStatus?.available
+              ? `Android 内置 Tectonic 可执行：${nativeTectonicStatus.stdout || 'version ok'}。当前先启用健康检查，PDF 编译入口待沙盒运行验证后开放。`
+              : '移动/Web 预览模式已启用：当前可生成并下载 .tex；可检测 APK 是否内置 Android Tectonic 引擎。')
             : latexCompilerStatus?.compiler?.available
             ? `已检测到 ${latexCompilerStatus.compiler.name}，可编译 PDF；也可导出 .tex 到 Overleaf/本地继续调整。`
             : (latexCompilerStatus?.compiler?.message || '正在检测 LaTeX 编译器；即使没有编译器，也可以先导出 .tex。')}
@@ -835,14 +882,25 @@ export default function PreviewPanel({
                 }}>
                   <div>
                     <div style={{ fontSize: '14px', fontWeight: 850 }}>移动/Web LaTeX 源码预览</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>当前阶段生成可下载 .tex；PDF 编译在桌面版或 Overleaf 完成。</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>当前阶段生成可下载 .tex；Android 引擎包可先做 Tectonic 健康检查。</div>
                   </div>
-                  <button onClick={handleExportLatexTex} style={{
-                    padding: '7px 10px', borderRadius: '7px', border: '1px solid rgba(255,255,255,0.18)',
-                    background: 'rgba(255,255,255,0.08)', color: '#f8fafc', fontSize: '11px', fontWeight: 800
-                  }}>
-                    下载 .tex
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                    {canUseNativeTectonic() && (
+                      <button onClick={handleCheckNativeTectonic} disabled={nativeTectonicChecking} style={{
+                        padding: '7px 10px', borderRadius: '7px', border: '1px solid rgba(255,255,255,0.18)',
+                        background: nativeTectonicStatus?.available ? 'rgba(34,197,94,0.22)' : 'rgba(245,158,11,0.18)',
+                        color: '#f8fafc', fontSize: '11px', fontWeight: 800, cursor: nativeTectonicChecking ? 'wait' : 'pointer'
+                      }}>
+                        {nativeTectonicChecking ? '检测中' : '检测 Tectonic'}
+                      </button>
+                    )}
+                    <button onClick={handleExportLatexTex} style={{
+                      padding: '7px 10px', borderRadius: '7px', border: '1px solid rgba(255,255,255,0.18)',
+                      background: 'rgba(255,255,255,0.08)', color: '#f8fafc', fontSize: '11px', fontWeight: 800
+                    }}>
+                      下载 .tex
+                    </button>
+                  </div>
                 </div>
                 <pre style={{
                   margin: 0, padding: '16px', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
