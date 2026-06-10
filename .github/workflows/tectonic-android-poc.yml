@@ -71,11 +71,10 @@ jobs:
         shell: bash
         run: |
           /tmp/vcpkg/vcpkg install \
-            fontconfig:arm64-android \
+            'fontconfig[core]:arm64-android' \
             freetype:arm64-android \
             'harfbuzz[graphite2]:arm64-android' \
             icu:arm64-android \
-            libiconv:arm64-android \
             libpng:arm64-android \
             zlib:arm64-android
 
@@ -94,9 +93,9 @@ jobs:
           VCPKG_ROOT: /tmp/vcpkg
           VCPKGRS_TRIPLET: arm64-android
         run: |
-          echo "vcpkg iconv/charset artifacts:"
+          echo "vcpkg fontconfig/iconv artifacts:"
           find /tmp/vcpkg/installed/arm64-android -maxdepth 4 \
-            \( -iname '*iconv*' -o -iname '*charset*' \) -print | sort || true
+            \( -iname '*fontconfig*' -o -iname '*iconv*' -o -iname '*charset*' \) -print | sort || true
           cargo build --release --target aarch64-linux-android -p tectonic 2>&1 | tee "$GITHUB_WORKSPACE/tectonic-android-build.log"
 
       - name: Collect result
