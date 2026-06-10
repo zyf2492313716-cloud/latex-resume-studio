@@ -158,7 +158,7 @@ jobs:
           npm run build
           npx cap sync android
           cd android
-          ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
+          ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
 
       - name: Verify embedded Tectonic APK
         if: steps.tectonic-build.outcome == 'success'
