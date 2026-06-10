@@ -1,5 +1,6 @@
 package com.zyf.latexresumestudio;
 
+import android.os.Build;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -14,7 +15,6 @@ import java.util.concurrent.TimeUnit;
 
 @CapacitorPlugin(name = "Tectonic")
 public class TectonicPlugin extends Plugin {
-    private static final String ASSET_PATH = "tectonic/tectonic-aarch64-linux-android";
     private static final String ENGINE_DIR = "engines";
     private static final String ENGINE_NAME = "tectonic";
 
@@ -27,6 +27,8 @@ public class TectonicPlugin extends Plugin {
             ProcessResult version = runEngine(engine, "--version");
             result.put("available", version.exitCode == 0);
             result.put("path", engine.getAbsolutePath());
+            result.put("abi", resolveSupportedAbi());
+            result.put("assetPath", resolveEngineAssetPath());
             result.put("exitCode", version.exitCode);
             result.put("stdout", version.stdout.trim());
             result.put("stderr", version.stderr.trim());
@@ -46,7 +48,7 @@ public class TectonicPlugin extends Plugin {
 
         File engine = new File(dir, ENGINE_NAME);
         if (!engine.exists() || engine.length() == 0) {
-            copyAssetToFile(ASSET_PATH, engine);
+            copyAssetToFile(resolveEngineAssetPath(), engine);
         }
 
         if (!engine.setExecutable(true, true)) {
@@ -54,6 +56,26 @@ public class TectonicPlugin extends Plugin {
         }
 
         return engine;
+    }
+
+    private String resolveEngineAssetPath() throws IOException {
+        String abi = resolveSupportedAbi();
+        if ("arm64-v8a".equals(abi)) {
+            return "tectonic/tectonic-aarch64-linux-android";
+        }
+        if ("x86_64".equals(abi)) {
+            return "tectonic/tectonic-x86_64-linux-android";
+        }
+        throw new IOException("当前 Android ABI 暂不支持内置 Tectonic: " + abi);
+    }
+
+    private String resolveSupportedAbi() {
+        for (String abi : Build.SUPPORTED_ABIS) {
+            if ("arm64-v8a".equals(abi) || "x86_64".equals(abi)) {
+                return abi;
+            }
+        }
+        return Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "unknown";
     }
 
     private void copyAssetToFile(String assetPath, File target) throws IOException {

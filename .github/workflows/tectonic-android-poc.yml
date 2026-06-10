@@ -15,7 +15,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android,x86_64-linux-android
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -66,6 +66,10 @@ jobs:
           CXX_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++
           AR_aarch64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+          CC_x86_64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
+          CXX_x86_64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang++
+          AR_x86_64_linux_android=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang
           EOF
 
       - name: Setup vcpkg Android triplet
@@ -88,7 +92,13 @@ jobs:
             'harfbuzz[graphite2]:arm64-android' \
             icu:arm64-android \
             libpng:arm64-android \
-            zlib:arm64-android
+            zlib:arm64-android \
+            'fontconfig[core]:x64-android' \
+            freetype:x64-android \
+            'harfbuzz[graphite2]:x64-android' \
+            icu:x64-android \
+            libpng:x64-android \
+            zlib:x64-android
 
       - name: Clone Tectonic
         shell: bash
@@ -103,12 +113,16 @@ jobs:
         env:
           TECTONIC_DEP_BACKEND: vcpkg
           VCPKG_ROOT: /tmp/vcpkg
-          VCPKGRS_TRIPLET: arm64-android
         run: |
+          set -o pipefail
           echo "vcpkg fontconfig/iconv artifacts:"
           find /tmp/vcpkg/installed/arm64-android -maxdepth 4 \
             \( -iname '*fontconfig*' -o -iname '*iconv*' -o -iname '*charset*' \) -print | sort || true
-          cargo build --release --target aarch64-linux-android -p tectonic 2>&1 | tee "$GITHUB_WORKSPACE/tectonic-android-build.log"
+          VCPKGRS_TRIPLET=arm64-android \
+            cargo build --release --target aarch64-linux-android -p tectonic 2>&1 | tee "$GITHUB_WORKSPACE/tectonic-android-build.log"
+          echo "\n===== x86_64 Android build =====" | tee -a "$GITHUB_WORKSPACE/tectonic-android-build.log"
+          VCPKGRS_TRIPLET=x64-android \
+            cargo build --release --target x86_64-linux-android -p tectonic 2>&1 | tee -a "$GITHUB_WORKSPACE/tectonic-android-build.log"
 
       - name: Collect result
         shell: bash
@@ -121,6 +135,12 @@ jobs:
           else
             echo "Tectonic Android binary was not produced." | tee tectonic-android-poc/file.txt
           fi
+          if [ -f /tmp/tectonic/target/x86_64-linux-android/release/tectonic ]; then
+            cp /tmp/tectonic/target/x86_64-linux-android/release/tectonic tectonic-android-poc/tectonic-x86_64-linux-android
+            file tectonic-android-poc/tectonic-x86_64-linux-android | tee -a tectonic-android-poc/file.txt
+          else
+            echo "Tectonic x86_64 Android binary was not produced." | tee -a tectonic-android-poc/file.txt
+          fi
 
       - name: Build APK with embedded Tectonic engine
         if: steps.tectonic-build.outcome == 'success'
@@ -129,7 +149,10 @@ jobs:
           mkdir -p android/app/src/main/assets/tectonic
           cp /tmp/tectonic/target/aarch64-linux-android/release/tectonic \
             android/app/src/main/assets/tectonic/tectonic-aarch64-linux-android
+          cp /tmp/tectonic/target/x86_64-linux-android/release/tectonic \
+            android/app/src/main/assets/tectonic/tectonic-x86_64-linux-android
           chmod 755 android/app/src/main/assets/tectonic/tectonic-aarch64-linux-android
+          chmod 755 android/app/src/main/assets/tectonic/tectonic-x86_64-linux-android
 
           npm ci
           npm run build
@@ -145,11 +168,22 @@ jobs:
           test -f "$APK"
           unzip -l "$APK" | tee tectonic-android-poc/apk-contents.txt
           unzip -l "$APK" | grep 'assets/tectonic/tectonic-aarch64-linux-android'
+          unzip -l "$APK" | grep 'assets/tectonic/tectonic-x86_64-linux-android'
           cp "$APK" tectonic-android-poc/latex-resume-studio-tectonic-android-debug.apk
           shasum -a 256 tectonic-android-poc/latex-resume-studio-tectonic-android-debug.apk \
             | tee tectonic-android-poc/apk.sha256
 
+      - name: Run Tectonic instrumentation smoke test
+        if: steps.tectonic-build.outcome == 'success'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          script: cd android && ./gradlew connectedDebugAndroidTest --no-daemon
+
       - name: Upload POC logs and binary if available
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tectonic-android-poc
