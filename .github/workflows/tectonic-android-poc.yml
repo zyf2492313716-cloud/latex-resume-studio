@@ -93,8 +93,10 @@ jobs:
           TECTONIC_DEP_BACKEND: vcpkg
           VCPKG_ROOT: /tmp/vcpkg
           VCPKGRS_TRIPLET: arm64-android
-          RUSTFLAGS: -L native=/tmp/vcpkg/installed/arm64-android/lib -l static=iconv
         run: |
+          echo "vcpkg iconv/charset artifacts:"
+          find /tmp/vcpkg/installed/arm64-android -maxdepth 4 \
+            \( -iname '*iconv*' -o -iname '*charset*' \) -print | sort || true
           cargo build --release --target aarch64-linux-android -p tectonic 2>&1 | tee "$GITHUB_WORKSPACE/tectonic-android-build.log"
 
       - name: Collect result
