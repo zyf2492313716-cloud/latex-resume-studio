@@ -173,22 +173,26 @@ jobs:
           shasum -a 256 tectonic-android-poc/latex-resume-studio-tectonic-android-debug.apk \
             | tee tectonic-android-poc/apk.sha256
 
-      - name: Run Tectonic instrumentation smoke test
-        if: steps.tectonic-build.outcome == 'success'
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          script: cd android && ./gradlew connectedDebugAndroidTest --no-daemon
-
-      - name: Upload POC logs and binary if available
+      - name: Upload POC logs and APK before runtime smoke
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tectonic-android-poc
           path: tectonic-android-poc/
           if-no-files-found: error
+
+      - name: Run Tectonic instrumentation smoke test
+        if: steps.tectonic-build.outcome == 'success'
+        timeout-minutes: 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: cd android && ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace
 
       - name: Fail when Tectonic Android build failed
         if: steps.tectonic-build.outcome != 'success'
