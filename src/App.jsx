@@ -211,7 +211,7 @@ export default function App() {
   const mobilePanelClass = (key) => `mobile-panel ${mobileView === key ? 'mobile-panel-active' : ''}`;
 
   return (
-    <div className={`workspace-container ${!isElectronRuntime ? 'mobile-runtime' : ''}`}>
+    <div className={`workspace-container ${isElectronRuntime ? 'desktop-runtime' : 'mobile-runtime'}`}>
       {!isElectronRuntime && (
         <div className="mobile-app-shell print-hide">
           <div>
@@ -223,6 +223,27 @@ export default function App() {
             onClick={() => setMobileView('preview')}
           >
             生成预览
+          </button>
+        </div>
+      )}
+      {isElectronRuntime && (
+        <div className="desktop-app-chrome print-hide">
+          <div className="desktop-brand-mark" aria-hidden="true">TeX</div>
+          <div className="desktop-brand-copy">
+            <div className="desktop-brand-kicker">LaTeX Resume Studio</div>
+            <div className="desktop-brand-title">LaTeX 简历工坊</div>
+          </div>
+          <div className="desktop-status-strip">
+            <span>{templateList.length || 0} 套 LaTeX 模板</span>
+            <span>{selectedTemplate?.displayName || selectedTemplate?.name || '未选择模板'}</span>
+            <span>{templateEngineType === 'latex' ? 'PDF / .tex 工作流' : '模板检测中'}</span>
+          </div>
+          <button
+            className="desktop-config-button"
+            onClick={() => setShowApiConfig(true)}
+            title="AI 接口配置"
+          >
+            <Settings size={15} /> AI 设置
           </button>
         </div>
       )}
